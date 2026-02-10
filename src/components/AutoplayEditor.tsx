@@ -1,12 +1,17 @@
-import { useRef } from 'react';
+import { useRef, type Dispatch, type SetStateAction } from 'react';
 import { WorkoutHeader } from './WorkoutHeader';
 import { AutoplayWorkout } from './AutoplayWorkout';
 import { Edit2, Timer, Clock } from 'lucide-react';
 import type { LibraryExercise } from '../App';
+import type { AutoplayItem } from '../types/autoplay';
 
 export function AutoplayEditor({
+  items,
+  setItems,
   onRegisterAdd,
 }: {
+  items: AutoplayItem[];
+  setItems: Dispatch<SetStateAction<AutoplayItem[]>>;
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
 }) {
   const addRestFnRef = useRef<(() => void) | null>(null);
@@ -38,6 +43,8 @@ export function AutoplayEditor({
         </div>
 
         <AutoplayWorkout
+          items={items}
+          setItems={setItems}
           onRegisterAdd={onRegisterAdd}
           onRegisterAddRest={(fn) => { addRestFnRef.current = fn; }}
         />

@@ -18,7 +18,7 @@ const MOCK_EXERCISES = [
   { id: '12', name: 'Agachamento Búlgaro', category: 'Pernas', equipment: 'Haltere', color: 'bg-red-100' },
 ];
 
-function ExerciseListContent({
+export function ExerciseListContent({
   onAddExercise,
 }: {
   onAddExercise?: (ex: LibraryExercise) => void;

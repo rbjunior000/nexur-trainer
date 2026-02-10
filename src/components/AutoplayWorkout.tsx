@@ -460,13 +460,16 @@ function EmptyState() {
 // --- Main Component ---
 
 export function AutoplayWorkout({
+  items,
+  setItems,
   onRegisterAdd,
   onRegisterAddRest,
 }: {
+  items: AutoplayItem[];
+  setItems: React.Dispatch<React.SetStateAction<AutoplayItem[]>>;
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
   onRegisterAddRest?: (fn: () => void) => void;
 }) {
-  const [items, setItems] = useState<AutoplayItem[]>([]);
   const [confirmAction, setConfirmAction] = useState<{
     message: string;
     onConfirm: () => void;

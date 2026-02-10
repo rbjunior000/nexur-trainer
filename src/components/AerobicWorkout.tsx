@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   Plus,
   Trash2,
@@ -21,7 +21,6 @@ import {
   IntensityZone,
   DurationType,
   Sport,
-  DEFAULT_BLOCKS,
   INTENSITY_LABELS,
   SPORT_LABELS,
   ZONE_COLORS,
@@ -500,19 +499,13 @@ function SportSelector({ value, onChange }: { value: Sport; onChange: (s: Sport)
 }
 
 // --- Main Component ---
-export function AerobicWorkout() {
-  const [workout, setWorkout] = useState<AerobicWorkoutType>({
-    workoutName: 'Novo Treino Aeróbico',
-    workoutStartDate: '',
-    workoutEndDate: '',
-    workoutDescription: '',
-    sport: 'running',
-    blocks: DEFAULT_BLOCKS.map((b) => ({
-      ...b,
-      id: uid(),
-      steps: b.steps.map((s) => ({ ...s, id: uid() })),
-    })),
-  });
+export function AerobicWorkout({
+  workout,
+  setWorkout,
+}: {
+  workout: AerobicWorkoutType;
+  setWorkout: Dispatch<SetStateAction<AerobicWorkoutType>>;
+}) {
 
   const [stepModalOpen, setStepModalOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<BlockStep | null>(null);

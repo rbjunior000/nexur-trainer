@@ -10,7 +10,7 @@ function formatSeconds(total: number): string {
   return `${s}s`;
 }
 
-export function AutoplaySummary({ items }: { items: AutoplayItem[] }) {
+export function AutoplaySummaryContent({ items }: { items: AutoplayItem[] }) {
   const exercises = items.filter((i) => i.type === 'exercise');
   const rests = items.filter((i) => i.type === 'rest');
 
@@ -19,7 +19,7 @@ export function AutoplaySummary({ items }: { items: AutoplayItem[] }) {
   const totalDuration = totalWork + totalRest;
 
   return (
-    <div className="w-80 h-screen bg-white border-l border-gray-200 flex flex-col fixed right-0 top-0 z-20 hidden xl:flex">
+    <>
       <div className="p-4 border-b border-gray-100">
         <h2 className="font-bold text-sm text-gray-900 uppercase tracking-wide">
           Resumo do Treino
@@ -103,6 +103,14 @@ export function AutoplaySummary({ items }: { items: AutoplayItem[] }) {
           </p>
         )}
       </div>
+    </>
+  );
+}
+
+export function AutoplaySummary({ items }: { items: AutoplayItem[] }) {
+  return (
+    <div className="w-80 h-screen bg-white border-l border-gray-200 flex flex-col fixed right-0 top-0 z-20 hidden xl:flex">
+      <AutoplaySummaryContent items={items} />
     </div>
   );
 }
