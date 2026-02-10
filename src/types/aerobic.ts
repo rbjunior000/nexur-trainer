@@ -59,31 +59,5 @@ export const ZONE_COLORS: Record<IntensityZone, string> = {
 };
 
 export const DEFAULT_BLOCKS: WorkoutBlock[] = [
-  {
-    id: 'block-init-0',
-    name: 'Aquecimento',
-    repetitions: 1,
-    totalDuration: '00:10:00',
-    steps: [
-      { id: 'step-init-0', name: 'Step 1', durationType: 'TIME', duration: '00:10:00', intensity: '1', level: 1 },
-    ],
-  },
-  {
-    id: 'block-init-1',
-    name: 'Principal',
-    repetitions: 3,
-    totalDuration: '00:05:00',
-    steps: [
-      { id: 'step-init-1', name: 'Step 1', durationType: 'TIME', duration: '00:05:00', intensity: '3', level: 1 },
-    ],
-  },
-  {
-    id: 'block-init-2',
-    name: 'Desaquecimento',
-    repetitions: 1,
-    totalDuration: '00:05:00',
-    steps: [
-      { id: 'step-init-2', name: 'Step 1', durationType: 'TIME', duration: '00:05:00', intensity: '1', level: 1 },
-    ],
-  },
+ 
 ];

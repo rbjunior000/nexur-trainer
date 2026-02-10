@@ -461,8 +461,10 @@ function EmptyState() {
 
 export function AutoplayWorkout({
   onRegisterAdd,
+  onRegisterAddRest,
 }: {
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
+  onRegisterAddRest?: (fn: () => void) => void;
 }) {
   const [items, setItems] = useState<AutoplayItem[]>([]);
   const [confirmAction, setConfirmAction] = useState<{
@@ -477,9 +479,17 @@ export function AutoplayWorkout({
     ]);
   }, []);
 
+  const addRest = useCallback(() => {
+    setItems((prev) => [...prev, makeRestItem()]);
+  }, []);
+
   useEffect(() => {
     onRegisterAdd?.(addFromLibrary);
   }, [onRegisterAdd, addFromLibrary]);
+
+  useEffect(() => {
+    onRegisterAddRest?.(addRest);
+  }, [onRegisterAddRest, addRest]);
 
   const updateItem = (id: string, updates: Partial<AutoplayItem>) => {
     setItems((prev) =>
