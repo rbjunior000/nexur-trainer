@@ -258,10 +258,19 @@ export function StrictWorkout({
   const removeExercise = (index: number) => {
     setExercises((prev) => {
       const next = [...prev];
-      if (index > 0 && next[index - 1].supersetWithNext && !next[index].supersetWithNext) {
-        next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+      // Se o anterior apontava pra este e este era o tail do grupo, deslinkar o anterior
+      if (index > 0 && next[index - 1].supersetWithNext) {
+        // Se o removido NÃO tinha supersetWithNext, o anterior perde o link
+        // Se o removido TINHA supersetWithNext, o anterior agora aponta pro próximo (chain se mantém)
+        if (!next[index].supersetWithNext) {
+          next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+        }
       }
       next.splice(index, 1);
+      // Garantir que o último exercício nunca tenha supersetWithNext=true
+      if (next.length > 0 && next[next.length - 1].supersetWithNext) {
+        next[next.length - 1] = { ...next[next.length - 1], supersetWithNext: false };
+      }
       return next;
     });
   };
@@ -330,7 +339,11 @@ export function StrictWorkout({
                     })
                   }
                   onDuplicate={() => duplicateExercise(index)}
-                  onToggleSuperset={() => updateExercise(exercise.id, { supersetWithNext: !exercise.supersetWithNext })}
+                  onToggleSuperset={() => {
+                    // Não permitir superset no último exercício
+                    if (index >= exercises.length - 1) return;
+                    updateExercise(exercise.id, { supersetWithNext: !exercise.supersetWithNext });
+                  }}
                   isLast={index === exercises.length - 1}
                 />
               </div>
