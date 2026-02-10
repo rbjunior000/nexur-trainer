@@ -340,11 +340,25 @@ export function StrictWorkout({
                   }
                   onDuplicate={() => duplicateExercise(index)}
                   onToggleSuperset={() => {
-                    // Não permitir superset no último exercício
                     if (index >= exercises.length - 1) return;
-                    updateExercise(exercise.id, { supersetWithNext: !exercise.supersetWithNext });
+                    updateExercise(exercise.id, { supersetWithNext: true });
+                  }}
+                  onUnlinkSuperset={() => {
+                    setExercises((prev) => {
+                      const next = [...prev];
+                      // Limpa o link de saída deste exercício
+                      if (next[index].supersetWithNext) {
+                        next[index] = { ...next[index], supersetWithNext: false };
+                      }
+                      // Limpa o link de entrada (o anterior apontando pra este)
+                      if (index > 0 && next[index - 1].supersetWithNext) {
+                        next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+                      }
+                      return next;
+                    });
                   }}
                   isLast={index === exercises.length - 1}
+                  isPartOfSuperset={linked}
                 />
               </div>
             </motion.div>
@@ -418,14 +432,18 @@ function ExerciseCard({
   onRemove,
   onDuplicate,
   onToggleSuperset,
+  onUnlinkSuperset,
   isLast,
+  isPartOfSuperset,
 }: {
   exercise: StrictExercise;
   onUpdate: (updates: Partial<StrictExercise>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
   onToggleSuperset: () => void;
+  onUnlinkSuperset: () => void;
   isLast: boolean;
+  isPartOfSuperset: boolean;
 }) {
   const config = TYPE_CONFIG[exercise.type];
   const [isTypeOpen, setIsTypeOpen] = useState(false);
@@ -658,13 +676,22 @@ function ExerciseCard({
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
                     className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
                   >
-                    {!isLast && (
+                    {isPartOfSuperset && (
+                      <button
+                        onClick={() => { onUnlinkSuperset(); setIsMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-orange-500"
+                      >
+                        <Link size={15} />
+                        Remover superset
+                      </button>
+                    )}
+                    {!isLast && !isPartOfSuperset && (
                       <button
                         onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
                         className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
                       >
-                        <Link size={15} className={exercise.supersetWithNext ? 'text-yellow-500' : 'text-gray-400'} />
-                        {exercise.supersetWithNext ? 'Remover superset' : 'Superset com próximo'}
+                        <Link size={15} className="text-gray-400" />
+                        Superset com próximo
                       </button>
                     )}
                     <button
@@ -713,13 +740,22 @@ function ExerciseCard({
                   exit={{ opacity: 0, scale: 0.95, y: -4 }}
                   className="absolute right-0 bottom-full mb-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
                 >
-                  {!isLast && (
+                  {isPartOfSuperset && (
+                    <button
+                      onClick={() => { onUnlinkSuperset(); setIsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-orange-500"
+                    >
+                      <Link size={15} />
+                      Remover superset
+                    </button>
+                  )}
+                  {!isLast && !isPartOfSuperset && (
                     <button
                       onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
                     >
-                      <Link size={15} className={exercise.supersetWithNext ? 'text-yellow-500' : 'text-gray-400'} />
-                      {exercise.supersetWithNext ? 'Remover superset' : 'Superset com próximo'}
+                      <Link size={15} className="text-gray-400" />
+                      Superset com próximo
                     </button>
                   )}
                   <button
