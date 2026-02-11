@@ -1,12 +1,7 @@
 export type ExerciseType =
 'weight_reps' |
-'reps_only' |
-'weighted_bodyweight' |
-'assisted_bodyweight' |
 'duration' |
-'weight_duration' |
-'distance_duration' |
-'weight_distance';
+'distance';
 
 export interface Exercise {
   id: string;
@@ -26,19 +21,23 @@ export interface FlexExercise extends Exercise {
 }
 
 // Strict Workout Types
+export type RepsMode = 'fixed' | 'range';
+
 export interface StrictSet {
   id: string;
   reps?: number;
+  repsRange?: [number, number];
   weight?: number;
   duration?: string;
   distance?: number;
-  // restTime removed from here
+  rest: string;
 }
 
 export interface StrictExercise extends Exercise {
   type: ExerciseType;
+  repsMode: RepsMode;
   sets: StrictSet[];
-  restTime: string;
+  restAfterExercise: string;
   notes: string;
   supersetWithNext: boolean;
 }

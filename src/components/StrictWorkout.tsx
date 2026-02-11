@@ -16,6 +16,7 @@ import {
   StrictExercise,
   ExerciseType,
   StrictSet,
+  RepsMode,
 } from '../types/workout';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LibraryExercise } from '../App';
@@ -35,42 +36,15 @@ type ExerciseTypeConfig = {
   textColor: string;
   columns: ColumnConfig[];
 };
-const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig> = {
+const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig & { hasReps?: boolean }> = {
   weight_reps: {
     label: 'Peso e Reps',
     color: 'blue',
     bgColor: 'bg-blue-100',
     textColor: 'text-blue-700',
+    hasReps: true,
     columns: [
       { key: 'weight', label: 'Peso', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'reps', label: 'Reps', type: 'number', placeholder: '0' },
-    ],
-  },
-  reps_only: {
-    label: 'Apenas Reps',
-    color: 'green',
-    bgColor: 'bg-green-100',
-    textColor: 'text-green-700',
-    columns: [{ key: 'reps', label: 'Reps', type: 'number', placeholder: '0' }],
-  },
-  weighted_bodyweight: {
-    label: 'Corporal + Carga',
-    color: 'purple',
-    bgColor: 'bg-purple-100',
-    textColor: 'text-purple-700',
-    columns: [
-      { key: 'weight', label: '+Kg', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'reps', label: 'Reps', type: 'number', placeholder: '0' },
-    ],
-  },
-  assisted_bodyweight: {
-    label: 'Corporal Assistido',
-    color: 'orange',
-    bgColor: 'bg-orange-100',
-    textColor: 'text-orange-700',
-    columns: [
-      { key: 'weight', label: '-Kg', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'reps', label: 'Reps', type: 'number', placeholder: '0' },
     ],
   },
   duration: {
@@ -80,35 +54,12 @@ const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig> = {
     textColor: 'text-teal-700',
     columns: [{ key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00' }],
   },
-  weight_duration: {
-    label: 'Peso e Duração',
-    color: 'indigo',
-    bgColor: 'bg-indigo-100',
-    textColor: 'text-indigo-700',
-    columns: [
-      { key: 'weight', label: 'Peso', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00' },
-    ],
-  },
-  distance_duration: {
-    label: 'Distância e Duração',
+  distance: {
+    label: 'Distância',
     color: 'rose',
     bgColor: 'bg-rose-100',
     textColor: 'text-rose-700',
-    columns: [
-      { key: 'distance', label: 'Distância', type: 'number', placeholder: '0', suffix: 'km' },
-      { key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00' },
-    ],
-  },
-  weight_distance: {
-    label: 'Peso e Distância',
-    color: 'amber',
-    bgColor: 'bg-amber-100',
-    textColor: 'text-amber-700',
-    columns: [
-      { key: 'weight', label: 'Peso', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'distance', label: 'Distância', type: 'number', placeholder: '0', suffix: 'km' },
-    ],
+    columns: [{ key: 'distance', label: 'Distância', type: 'number', placeholder: '0', suffix: 'km' }],
   },
 };
 const REST_OPTIONS = ['OFF', '30s', '60s', '90s', '2min', '3min', 'Custom'];
@@ -127,13 +78,14 @@ function makeExerciseFromLibrary(ex: LibraryExercise): StrictExercise {
     category: ex.category,
     equipment: ex.equipment,
     type: 'weight_reps',
-    restTime: '60s',
+    repsMode: 'fixed',
+    restAfterExercise: '60s',
     notes: '',
     supersetWithNext: false,
     sets: [
-      { id: uid(), reps: 12, weight: 0 },
-      { id: uid(), reps: 10, weight: 0 },
-      { id: uid(), reps: 8, weight: 0 },
+      { id: uid(), reps: 12, weight: 0, rest: '60s' },
+      { id: uid(), reps: 10, weight: 0, rest: '60s' },
+      { id: uid(), reps: 8, weight: 0, rest: '60s' },
     ],
   };
 }
@@ -394,24 +346,30 @@ export function StrictWorkout({
 
 // --- Rest Selector ---
 function RestSelector({
+  label,
   value,
   onChange,
 }: {
+  label: string;
   value: string;
   onChange: (val: string) => void;
 }) {
+  const presets = REST_OPTIONS.filter((o) => o !== 'Custom');
+  const isCustomValue = !REST_OPTIONS.includes(value);
+  const [editingCustom, setEditingCustom] = useState(isCustomValue);
+
   return (
-    <div className="flex items-center gap-4 py-2 overflow-x-auto hide-scrollbar">
-      <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase whitespace-nowrap">
-        <Clock size={14} />
-        Descanso
+    <div className="flex items-center gap-3 py-2 overflow-x-auto hide-scrollbar">
+      <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">
+        <Clock size={12} />
+        {label}
       </div>
-      <div className="flex items-center gap-2">
-        {REST_OPTIONS.map((opt) => (
+      <div className="flex items-center gap-1.5">
+        {presets.map((opt) => (
           <button
             key={opt}
-            onClick={() => onChange(opt)}
-            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${
+            onClick={() => { onChange(opt); setEditingCustom(false); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
               value === opt
                 ? 'bg-yellow-400 text-gray-900'
                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -420,6 +378,28 @@ function RestSelector({
             {opt}
           </button>
         ))}
+        {editingCustom ? (
+          <input
+            autoFocus
+            type="text"
+            value={value === 'Custom' ? '' : value}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={() => { if (!value || value === 'Custom') { onChange('OFF'); setEditingCustom(false); } }}
+            placeholder="ex: 45s"
+            className="w-16 px-2 py-1.5 rounded-lg text-xs font-medium border border-yellow-400 text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-yellow-400"
+          />
+        ) : (
+          <button
+            onClick={() => { setEditingCustom(true); if (!isCustomValue) onChange(''); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              isCustomValue
+                ? 'bg-yellow-400 text-gray-900'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            {isCustomValue && value ? value : 'Outro'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -449,13 +429,22 @@ function ExerciseCard({
   const [isTypeOpen, setIsTypeOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  const [isRepsMenuOpen, setIsRepsMenuOpen] = useState(false);
+
   const handleTypeChange = (newType: ExerciseType) => {
-    onUpdate({ type: newType, sets: [] });
+    onUpdate({ type: newType, sets: [], repsMode: 'fixed' });
     setIsTypeOpen(false);
   };
 
+  const hasReps = TYPE_CONFIG[exercise.type].hasReps;
+  const isRange = exercise.repsMode === 'range';
+
   const addSet = () => {
-    onUpdate({ sets: [...exercise.sets, { id: uid() }] });
+    const lastSet = exercise.sets[exercise.sets.length - 1];
+    const newSet: StrictSet = lastSet
+      ? { ...lastSet, id: uid() }
+      : { id: uid(), rest: '60s' };
+    onUpdate({ sets: [...exercise.sets, newSet] });
   };
 
   const removeSet = (setId: string) => {
@@ -550,24 +539,66 @@ function ExerciseCard({
 
           {/* Sets Table */}
           <div>
-            <div
-              className="grid gap-2 mb-1.5 px-2"
-              style={{
-                gridTemplateColumns:
-                  config.columns.length === 1 ? '36px 1fr 60px' : '36px 1fr 1fr 60px',
-              }}
-            >
-              <div className="text-[10px] font-bold text-gray-400 uppercase text-center self-center">
-                Série
+            {/* Header */}
+            <div className="flex items-end gap-2 mb-1.5 px-1">
+              <div className="w-8 text-[10px] font-bold text-gray-400 uppercase text-center">
+                #
               </div>
               {config.columns.map((col) => (
-                <div key={col.key} className="text-[10px] font-bold text-gray-400 uppercase text-center self-center">
+                <div key={col.key} className="flex-1 text-[10px] font-bold text-gray-400 uppercase text-center">
                   {col.label}
                 </div>
               ))}
-              <div />
+              {hasReps && (
+                <div className="flex-1 relative text-center">
+                  <button
+                    onClick={() => setIsRepsMenuOpen(!isRepsMenuOpen)}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase hover:text-gray-600 transition-colors"
+                  >
+                    {isRange ? 'Faixa de Reps' : 'Reps'}
+                    <ChevronDown size={10} />
+                  </button>
+                  <AnimatePresence>
+                    {isRepsMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setIsRepsMenuOpen(false)} />
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                          className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-20 p-3 space-y-2"
+                        >
+                          <p className="text-xs font-semibold text-gray-700">Opções de Repetições</p>
+                          <button
+                            onClick={() => { onUpdate({ repsMode: 'fixed' }); setIsRepsMenuOpen(false); }}
+                            className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                              !isRange ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            Reps
+                          </button>
+                          <button
+                            onClick={() => { onUpdate({ repsMode: 'range' }); setIsRepsMenuOpen(false); }}
+                            className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                              isRange ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            Faixa de Reps
+                          </button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+              <div className="w-20 text-[10px] font-bold text-gray-400 uppercase text-center flex items-center justify-center gap-1">
+                <Clock size={10} />
+                Descanso
+              </div>
+              <div className="w-14" />
             </div>
 
+            {/* Rows */}
             <div className="space-y-1">
               <AnimatePresence mode="popLayout">
                 {exercise.sets.map((set, setIndex) => (
@@ -577,32 +608,100 @@ function ExerciseCard({
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10, height: 0 }}
-                    className="grid gap-2 items-center bg-gray-50 p-2 rounded-lg group hover:bg-gray-100 transition-colors"
-                    style={{
-                      gridTemplateColumns:
-                        config.columns.length === 1 ? '36px 1fr 60px' : '36px 1fr 1fr 60px',
-                    }}
+                    className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg group hover:bg-gray-100 transition-colors px-1"
                   >
-                    <div className="text-sm font-bold text-gray-400 text-center">{setIndex + 1}</div>
+                    <div className="w-8 text-sm font-bold text-gray-400 text-center flex-shrink-0">{setIndex + 1}</div>
 
                     {config.columns.map((col) => (
-                      <div key={col.key} className="relative">
+                      <div key={col.key} className="flex-1 relative">
                         <input
                           type={col.type}
                           value={(set[col.key] as string | number) || ''}
                           onChange={(e) => updateSet(set.id, col.key, e.target.value)}
                           placeholder={col.placeholder}
-                          className="w-full text-center bg-white border border-gray-200 rounded-md py-1.5 text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                          className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
                         />
                         {col.suffix && (
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
                             {col.suffix}
                           </span>
                         )}
                       </div>
                     ))}
 
-                    <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    {/* Reps cell */}
+                    {hasReps && (
+                      isRange ? (
+                        <div className="flex-1 flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={set.repsRange?.[0] || ''}
+                            onChange={(e) => {
+                              const min = Number(e.target.value) || 0;
+                              const max = set.repsRange?.[1] || 0;
+                              updateSet(set.id, 'repsRange', [min, max]);
+                            }}
+                            placeholder="0"
+                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                          />
+                          <span className="text-gray-300 text-sm flex-shrink-0">-</span>
+                          <input
+                            type="number"
+                            value={set.repsRange?.[1] || ''}
+                            onChange={(e) => {
+                              const min = set.repsRange?.[0] || 0;
+                              const max = Number(e.target.value) || 0;
+                              updateSet(set.id, 'repsRange', [min, max]);
+                            }}
+                            placeholder="0"
+                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            value={set.reps || ''}
+                            onChange={(e) => updateSet(set.id, 'reps', e.target.value)}
+                            placeholder="0"
+                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                          />
+                        </div>
+                      )
+                    )}
+
+                    {/* Rest per set */}
+                    <div className="w-20 flex-shrink-0">
+                      {!REST_OPTIONS.includes(set.rest) ? (
+                        <input
+                          type="text"
+                          value={set.rest}
+                          onChange={(e) => updateSet(set.id, 'rest', e.target.value)}
+                          onBlur={() => { if (!set.rest) updateSet(set.id, 'rest', 'OFF'); }}
+                          placeholder="ex: 45s"
+                          className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
+                        />
+                      ) : (
+                        <select
+                          value={set.rest}
+                          onChange={(e) => {
+                            if (e.target.value === 'Custom') {
+                              updateSet(set.id, 'rest', '');
+                            } else {
+                              updateSet(set.id, 'rest', e.target.value);
+                            }
+                          }}
+                          className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-600 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all appearance-none cursor-pointer"
+                        >
+                          {REST_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="w-14 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => duplicateSet(set.id)}
                         className="p-1 text-gray-300 hover:text-blue-500 transition-colors"
@@ -632,10 +731,11 @@ function ExerciseCard({
             </button>
           </div>
 
-          {/* Rest Selector */}
+          {/* Rest After Exercise */}
           <RestSelector
-            value={exercise.restTime}
-            onChange={(val) => onUpdate({ restTime: val })}
+            label="Descanso próx. exercício"
+            value={exercise.restAfterExercise}
+            onChange={(val) => onUpdate({ restAfterExercise: val })}
           />
 
           {/* Notes */}

@@ -26,6 +26,7 @@ interface TrainingSet {
   weight?: number;
   duration?: string;
   distance?: number;
+  rest: number; // seconds
   completed: boolean;
 }
 
@@ -39,7 +40,7 @@ interface TrainingExercise {
   typeColor: string;
   typeBg: string;
   sets: TrainingSet[];
-  restTime: number; // seconds
+  restAfterExercise: number; // seconds
   notes: string;
   supersetId?: string;
 }
@@ -63,12 +64,12 @@ const MOCK_EXERCISES: TrainingExercise[] = [
     typeLabel: 'Weight Reps',
     typeColor: 'text-blue-700',
     typeBg: 'bg-blue-100',
-    restTime: 60,
+    restAfterExercise: 90,
     notes: '',
     sets: [
-      { id: 's1', reps: 12, weight: 20, completed: false },
-      { id: 's2', reps: 10, weight: 25, completed: false },
-      { id: 's3', reps: 8, weight: 30, completed: false },
+      { id: 's1', reps: 12, weight: 20, rest: 60, completed: false },
+      { id: 's2', reps: 10, weight: 25, rest: 60, completed: false },
+      { id: 's3', reps: 8, weight: 30, rest: 60, completed: false },
     ],
   },
   {
@@ -80,13 +81,13 @@ const MOCK_EXERCISES: TrainingExercise[] = [
     typeLabel: 'Weight Reps',
     typeColor: 'text-blue-700',
     typeBg: 'bg-blue-100',
-    restTime: 0,
+    restAfterExercise: 0,
     notes: '',
     supersetId: 'ss1',
     sets: [
-      { id: 's1', reps: 12, weight: 10, completed: false },
-      { id: 's2', reps: 10, weight: 12, completed: false },
-      { id: 's3', reps: 8, weight: 14, completed: false },
+      { id: 's1', reps: 12, weight: 10, rest: 0, completed: false },
+      { id: 's2', reps: 10, weight: 12, rest: 0, completed: false },
+      { id: 's3', reps: 8, weight: 14, rest: 0, completed: false },
     ],
   },
   {
@@ -98,13 +99,13 @@ const MOCK_EXERCISES: TrainingExercise[] = [
     typeLabel: 'Weight Reps',
     typeColor: 'text-blue-700',
     typeBg: 'bg-blue-100',
-    restTime: 0,
+    restAfterExercise: 0,
     notes: '',
     supersetId: 'ss1',
     sets: [
-      { id: 's1', reps: 12, weight: 15, completed: false },
-      { id: 's2', reps: 10, weight: 20, completed: false },
-      { id: 's3', reps: 8, weight: 20, completed: false },
+      { id: 's1', reps: 12, weight: 15, rest: 0, completed: false },
+      { id: 's2', reps: 10, weight: 20, rest: 0, completed: false },
+      { id: 's3', reps: 8, weight: 20, rest: 0, completed: false },
     ],
   },
   {
@@ -116,12 +117,12 @@ const MOCK_EXERCISES: TrainingExercise[] = [
     typeLabel: 'Duration',
     typeColor: 'text-teal-700',
     typeBg: 'bg-teal-100',
-    restTime: 30,
+    restAfterExercise: 60,
     notes: 'Manter coluna reta',
     sets: [
-      { id: 's1', duration: '00:45', completed: false },
-      { id: 's2', duration: '01:00', completed: false },
-      { id: 's3', duration: '01:00', completed: false },
+      { id: 's1', duration: '00:45', rest: 30, completed: false },
+      { id: 's2', duration: '01:00', rest: 30, completed: false },
+      { id: 's3', duration: '01:00', rest: 30, completed: false },
     ],
   },
   {
@@ -133,12 +134,12 @@ const MOCK_EXERCISES: TrainingExercise[] = [
     typeLabel: 'Weight Reps',
     typeColor: 'text-blue-700',
     typeBg: 'bg-blue-100',
-    restTime: 90,
+    restAfterExercise: 120,
     notes: '',
     sets: [
-      { id: 's1', reps: 10, weight: 12, completed: false },
-      { id: 's2', reps: 8, weight: 14, completed: false },
-      { id: 's3', reps: 8, weight: 16, completed: false },
+      { id: 's1', reps: 10, weight: 12, rest: 90, completed: false },
+      { id: 's2', reps: 8, weight: 14, rest: 90, completed: false },
+      { id: 's3', reps: 8, weight: 16, rest: 90, completed: false },
     ],
   },
 ];
@@ -560,11 +561,11 @@ function TrainingExerciseCard({
               {/* Quick actions bar */}
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
                 <div className="flex items-center gap-2">
-                  {exercise.restTime > 0 && (
+                  {exercise.restAfterExercise > 0 && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
                       <Timer size={12} className="text-gray-500" />
                       <span className="text-xs font-bold text-gray-600">
-                        {exercise.restTime}s
+                        Próx: {exercise.restAfterExercise}s
                       </span>
                     </div>
                   )}
@@ -799,10 +800,15 @@ export function StrictTrainingPage({ onBack }: { onBack?: () => void }) {
           const newSets = ex.sets.map((s) =>
             s.id === setId ? { ...s, completed: !s.completed } : s
           );
-          // If we just completed a set and rest time > 0, show rest timer
+          // If we just completed a set, show appropriate rest timer
           const set = ex.sets.find((s) => s.id === setId);
-          if (set && !set.completed && ex.restTime > 0) {
-            setRestTimer(ex.restTime);
+          if (set && !set.completed) {
+            const allCompleted = newSets.every((s) => s.completed);
+            if (allCompleted && ex.restAfterExercise > 0) {
+              setRestTimer(ex.restAfterExercise);
+            } else if (!allCompleted && set.rest > 0) {
+              setRestTimer(set.rest);
+            }
           }
           return { ...ex, sets: newSets };
         })
