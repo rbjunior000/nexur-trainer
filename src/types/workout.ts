@@ -1,7 +1,8 @@
 export type ExerciseType =
 'weight_reps' |
 'duration' |
-'distance';
+'distance' |
+'rest';
 
 export interface Exercise {
   id: string;
@@ -30,16 +31,33 @@ export interface StrictSet {
   weight?: number;
   duration?: string;
   distance?: number;
-  rest: string;
+  rest: number; // seconds (0 = OFF)
 }
 
 export interface StrictExercise extends Exercise {
   type: ExerciseType;
   repsMode: RepsMode;
   sets: StrictSet[];
-  restAfterExercise: string;
+  restDuration?: number; // seconds (0 = OFF), used only when type='rest'
   notes: string;
   supersetWithNext: boolean;
+}
+
+let _typeIdCounter = 0;
+export function makeRestExercise(duration?: number): StrictExercise {
+  return {
+    id: `rest_${++_typeIdCounter}_${Date.now()}`,
+    name: 'Descanso',
+    thumbnail: '',
+    category: '',
+    equipment: '',
+    type: 'rest',
+    repsMode: 'fixed',
+    sets: [],
+    restDuration: duration ?? 60,
+    notes: '',
+    supersetWithNext: false,
+  };
 }
 
 // Cardio Workout Types

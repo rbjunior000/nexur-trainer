@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import IMask from 'imask';
+import { IMaskInput } from 'react-imask';
 import {
   Trash2,
   Plus,
@@ -11,14 +13,32 @@ import {
   Dumbbell,
   ArrowRight,
   MoreVertical,
+  Timer,
 } from 'lucide-react';
 import {
   StrictExercise,
   ExerciseType,
   StrictSet,
-  RepsMode,
+  makeRestExercise,
 } from '../types/workout';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { LibraryExercise } from '../App';
 
 // --- Configuration ---
@@ -36,7 +56,7 @@ type ExerciseTypeConfig = {
   textColor: string;
   columns: ColumnConfig[];
 };
-const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig & { hasReps?: boolean }> = {
+const TYPE_CONFIG: Record<string, ExerciseTypeConfig & { hasReps?: boolean }> = {
   weight_reps: {
     label: 'Peso e Reps',
     color: 'blue',
@@ -52,7 +72,7 @@ const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig & { hasReps?: boolean
     color: 'teal',
     bgColor: 'bg-teal-100',
     textColor: 'text-teal-700',
-    columns: [{ key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00' }],
+    columns: [{ key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00:00' }],
   },
   distance: {
     label: 'Distância',
@@ -62,7 +82,16 @@ const TYPE_CONFIG: Record<ExerciseType, ExerciseTypeConfig & { hasReps?: boolean
     columns: [{ key: 'distance', label: 'Distância', type: 'number', placeholder: '0', suffix: 'km' }],
   },
 };
-const REST_OPTIONS = ['OFF', '30s', '60s', '90s', '2min', '3min', 'Custom'];
+const REST_PRESETS: { label: string; value: number }[] = [
+  { label: 'OFF', value: 0 },
+  { label: '10s', value: 10 },
+  { label: '30s', value: 30 },
+  { label: '60s', value: 60 },
+  { label: '90s', value: 90 },
+  { label: '2min', value: 120 },
+  { label: '3min', value: 180 },
+];
+const REST_PRESET_VALUES = new Set(REST_PRESETS.map((p) => p.value));
 
 // --- Helpers ---
 let _idCounter = 100;
@@ -70,24 +99,33 @@ function uid() {
   return String(++_idCounter);
 }
 
-function makeExerciseFromLibrary(ex: LibraryExercise): StrictExercise {
-  return {
-    id: uid(),
-    name: ex.name,
-    thumbnail: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop',
-    category: ex.category,
-    equipment: ex.equipment,
-    type: 'weight_reps',
-    repsMode: 'fixed',
-    restAfterExercise: '60s',
-    notes: '',
-    supersetWithNext: false,
-    sets: [
-      { id: uid(), reps: 12, weight: 0, rest: '60s' },
-      { id: uid(), reps: 10, weight: 0, rest: '60s' },
-      { id: uid(), reps: 8, weight: 0, rest: '60s' },
-    ],
-  };
+function DurationInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (masked: string) => void;
+  placeholder?: string;
+  className: string;
+}) {
+  return (
+    <IMaskInput
+      mask="HH:MM:SS"
+      blocks={{
+        HH: { mask: IMask.MaskedRange, from: 0, to: 23, maxLength: 2, placeholderChar: '0' },
+        MM: { mask: IMask.MaskedRange, from: 0, to: 59, maxLength: 2, placeholderChar: '0' },
+        SS: { mask: IMask.MaskedRange, from: 0, to: 59, maxLength: 2, placeholderChar: '0' },
+      }}
+      lazy={false}
+      overwrite
+      value={value || '00:00:00'}
+      onAccept={(val: string) => onChange(val)}
+      placeholder="00:00:00"
+      inputMode="numeric"
+      className={className}
+    />
+  );
 }
 
 function cloneExercise(ex: StrictExercise): StrictExercise {
@@ -155,6 +193,7 @@ function SupersetConnector() {
 
 // --- Helper: is exercise part of a superset group? ---
 function isInSuperset(exercises: StrictExercise[], index: number): boolean {
+  if (exercises[index].type === 'rest') return false;
   if (exercises[index].supersetWithNext) return true;
   if (index > 0 && exercises[index - 1].supersetWithNext) return true;
   return false;
@@ -184,8 +223,14 @@ function EmptyState() {
 // --- Components ---
 export function StrictWorkout({
   onRegisterAdd,
+  onRegisterAddRest,
+  onExercisesChange,
+  defaultExerciseType = 'weight_reps',
 }: {
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
+  onRegisterAddRest?: (fn: () => void) => void;
+  onExercisesChange?: (exercises: StrictExercise[]) => void;
+  defaultExerciseType?: ExerciseType;
 }) {
   const [exercises, setExercises] = useState<StrictExercise[]>([]);
   const [confirmAction, setConfirmAction] = useState<{
@@ -194,12 +239,59 @@ export function StrictWorkout({
   } | null>(null);
 
   const addFromLibrary = useCallback((ex: LibraryExercise) => {
-    setExercises((prev) => [...prev, makeExerciseFromLibrary(ex)]);
+    const isDuration = defaultExerciseType === 'duration';
+    const newExercise: StrictExercise = {
+      id: uid(),
+      name: ex.name,
+      thumbnail: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop',
+      category: ex.category,
+      equipment: ex.equipment,
+      type: defaultExerciseType,
+      repsMode: 'fixed',
+      notes: '',
+      supersetWithNext: false,
+      sets: isDuration
+        ? [
+            { id: uid(), duration: '00:00:30', rest: 60 },
+            { id: uid(), duration: '00:00:30', rest: 60 },
+            { id: uid(), duration: '00:00:30', rest: 60 },
+          ]
+        : [
+            { id: uid(), reps: 12, weight: 0, rest: 60 },
+            { id: uid(), reps: 10, weight: 0, rest: 60 },
+            { id: uid(), reps: 8, weight: 0, rest: 60 },
+          ],
+    };
+    setExercises((prev) => [...prev, newExercise]);
+  }, [defaultExerciseType]);
+
+  const addRestAtEnd = useCallback(() => {
+    setExercises((prev) => [...prev, makeRestExercise()]);
+  }, []);
+
+  const insertRestAt = useCallback((index: number) => {
+    setExercises((prev) => {
+      const next = [...prev];
+      // If inserting between superset-linked exercises, break the chain
+      if (index > 0 && next[index - 1].supersetWithNext) {
+        next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+      }
+      next.splice(index, 0, makeRestExercise());
+      return next;
+    });
   }, []);
 
   useEffect(() => {
     onRegisterAdd?.(addFromLibrary);
   }, [onRegisterAdd, addFromLibrary]);
+
+  useEffect(() => {
+    onRegisterAddRest?.(addRestAtEnd);
+  }, [onRegisterAddRest, addRestAtEnd]);
+
+  useEffect(() => {
+    onExercisesChange?.(exercises);
+  }, [exercises, onExercisesChange]);
 
   const updateExercise = (id: string, updates: Partial<StrictExercise>) => {
     setExercises((prev) =>
@@ -235,88 +327,207 @@ export function StrictWorkout({
     });
   };
 
+  const isLast = (index: number) => index === exercises.length - 1;
+
+  // --- Drag & Drop ---
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
+
+  const exerciseIds = useMemo(() => exercises.map((e) => e.id), [exercises]);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setExercises((prev) => {
+      const oldIdx = prev.findIndex((e) => e.id === active.id);
+      const newIdx = prev.findIndex((e) => e.id === over.id);
+      if (oldIdx < 0 || newIdx < 0) return prev;
+
+      // Break superset chains affected by this move
+      const next = [...prev];
+
+      // If the dragged item was part of a superset, break outgoing/incoming links
+      if (next[oldIdx].supersetWithNext) {
+        next[oldIdx] = { ...next[oldIdx], supersetWithNext: false };
+      }
+      if (oldIdx > 0 && next[oldIdx - 1].supersetWithNext) {
+        // Previous item pointed to this one — if this item also pointed forward,
+        // the previous can now point to the item that was below. Otherwise break.
+        next[oldIdx - 1] = { ...next[oldIdx - 1], supersetWithNext: false };
+      }
+
+      const reordered = arrayMove(next, oldIdx, newIdx);
+
+      // Fix: last item can't have supersetWithNext
+      if (reordered.length > 0 && reordered[reordered.length - 1].supersetWithNext) {
+        reordered[reordered.length - 1] = { ...reordered[reordered.length - 1], supersetWithNext: false };
+      }
+      // Fix: rest items can't have supersetWithNext
+      reordered.forEach((ex, i) => {
+        if (ex.type === 'rest' && ex.supersetWithNext) {
+          reordered[i] = { ...ex, supersetWithNext: false };
+        }
+        // If item has supersetWithNext and next is rest, break
+        if (ex.supersetWithNext && i < reordered.length - 1 && reordered[i + 1].type === 'rest') {
+          reordered[i] = { ...reordered[i], supersetWithNext: false };
+        }
+      });
+
+      return reordered;
+    });
+  }, []);
+
+  const activeExercise = activeId ? exercises.find((e) => e.id === activeId) : null;
+
   if (exercises.length === 0) {
     return <EmptyState />;
   }
 
   return (
     <div className="pb-12">
-      <AnimatePresence mode="popLayout">
-        {exercises.map((exercise, index) => {
-          const linked = isInSuperset(exercises, index);
-          const prevLinked = index > 0 && exercises[index - 1].supersetWithNext;
-          const isFirst = !prevLinked;
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={exerciseIds} strategy={verticalListSortingStrategy}>
+          {exercises.map((exercise, index) => {
+            const linked = isInSuperset(exercises, index);
+            const prevLinked = index > 0 && exercises[index - 1].supersetWithNext;
+            const isFirst = !prevLinked;
+            const isRest = exercise.type === 'rest';
 
-          return (
-            <motion.div
-              key={exercise.id}
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className={isFirst && index > 0 ? 'mt-4' : ''}
-            >
-              {/* Superset connector */}
-              {prevLinked && <SupersetConnector />}
+            const nextExercise = index < exercises.length - 1 ? exercises[index + 1] : null;
+            const canSuperset = !isRest && !isLast(index) && nextExercise?.type !== 'rest';
 
-              {/* Superset badge above first card of group */}
-              {exercise.supersetWithNext && isFirst && (
-                <div className={`mb-2 ${linked ? 'pl-5' : ''}`}>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400 text-gray-900 rounded-lg text-[11px] font-bold">
-                    <div className="flex items-center gap-4 ">
-                    <Link size={11} />
-                    Superset
+            return (
+              <SortableExerciseItem key={exercise.id} id={exercise.id}>
+                {(handleProps) => (
+                  <>
+                    {/* Inline +Descanso button between exercises */}
+                    {index > 0 && !prevLinked && !isRest && exercises[index - 1].type !== 'rest' && (
+                      <div className="flex justify-center py-1 group">
+                        <button
+                          onClick={() => insertRestAt(index)}
+                          className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-gray-400 bg-gray-50 hover:bg-yellow-50 hover:text-yellow-600 rounded-full border border-dashed border-gray-200 hover:border-yellow-300 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Timer size={12} />
+                          Descanso
+                        </button>
+                      </div>
+                    )}
+
+                    {isFirst && index > 0 && !isRest && (
+                      <div className="mt-4" />
+                    )}
+
+                    {/* Superset connector */}
+                    {prevLinked && <SupersetConnector />}
+
+                    {/* Superset badge above first card of group */}
+                    {exercise.supersetWithNext && isFirst && (
+                      <div className={`mb-2 ${linked ? 'pl-5' : ''}`}>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400 text-gray-900 rounded-lg text-[11px] font-bold">
+                          <div className="flex items-center gap-4 ">
+                          <Link size={11} />
+                          Superset
+                          </div>
+                        </span>
+                      </div>
+                    )}
+
+                    <div className={`relative ${linked ? 'pl-5' : ''}`}>
+                      {linked && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 rounded-full" />
+                      )}
+
+                      {isRest ? (
+                        <RestCard
+                          exercise={exercise}
+                          onUpdate={(updates) => updateExercise(exercise.id, updates)}
+                          onRemove={() => removeExercise(index)}
+                          dragHandleProps={handleProps}
+                        />
+                      ) : (
+                        <ExerciseCard
+                          exercise={exercise}
+                          onUpdate={(updates) => updateExercise(exercise.id, updates)}
+                          onRemove={() =>
+                            setConfirmAction({
+                              message: `Remover "${exercise.name}" do treino?`,
+                              onConfirm: () => {
+                                removeExercise(index);
+                                setConfirmAction(null);
+                              },
+                            })
+                          }
+                          onDuplicate={() => duplicateExercise(index)}
+                          onToggleSuperset={() => {
+                            if (!canSuperset) return;
+                            updateExercise(exercise.id, { supersetWithNext: true });
+                          }}
+                          onUnlinkSuperset={() => {
+                            setExercises((prev) => {
+                              const next = [...prev];
+                              if (next[index].supersetWithNext) {
+                                next[index] = { ...next[index], supersetWithNext: false };
+                              }
+                              if (index > 0 && next[index - 1].supersetWithNext) {
+                                next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+                              }
+                              return next;
+                            });
+                          }}
+                          isLast={isLast(index)}
+                          canSuperset={canSuperset}
+                          isPartOfSuperset={linked}
+                          lockType={defaultExerciseType !== 'weight_reps'}
+                          dragHandleProps={handleProps}
+                        />
+                      )}
                     </div>
-                  </span>
+                  </>
+                )}
+              </SortableExerciseItem>
+            );
+          })}
+        </SortableContext>
+
+        <DragOverlay>
+          {activeExercise && (
+            <div className="opacity-80 shadow-2xl rounded-xl">
+              {activeExercise.type === 'rest' ? (
+                <div className="flex items-center gap-3 py-3 px-4 rounded-xl bg-gray-50 border border-gray-200">
+                  <GripVertical size={16} className="text-gray-300" />
+                  <Timer size={16} className="text-gray-400" />
+                  <span className="text-sm font-bold text-gray-600">Descanso</span>
+                  <span className="text-xs text-gray-400 ml-2">{activeExercise.restDuration ?? 60}s</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 py-4 px-4 rounded-xl bg-white border border-gray-200">
+                  <GripVertical size={18} className="text-gray-300" />
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                    <img src={activeExercise.thumbnail} alt={activeExercise.name} className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-900">{activeExercise.name}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{activeExercise.sets.length} séries</span>
                 </div>
               )}
-
-              <div className={`relative ${linked ? 'pl-5' : ''}`}>
-                {/* Lateral bar */}
-                {linked && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 rounded-full" />
-                )}
-
-                <ExerciseCard
-                  exercise={exercise}
-                  onUpdate={(updates) => updateExercise(exercise.id, updates)}
-                  onRemove={() =>
-                    setConfirmAction({
-                      message: `Remover "${exercise.name}" do treino?`,
-                      onConfirm: () => {
-                        removeExercise(index);
-                        setConfirmAction(null);
-                      },
-                    })
-                  }
-                  onDuplicate={() => duplicateExercise(index)}
-                  onToggleSuperset={() => {
-                    if (index >= exercises.length - 1) return;
-                    updateExercise(exercise.id, { supersetWithNext: true });
-                  }}
-                  onUnlinkSuperset={() => {
-                    setExercises((prev) => {
-                      const next = [...prev];
-                      // Limpa o link de saída deste exercício
-                      if (next[index].supersetWithNext) {
-                        next[index] = { ...next[index], supersetWithNext: false };
-                      }
-                      // Limpa o link de entrada (o anterior apontando pra este)
-                      if (index > 0 && next[index - 1].supersetWithNext) {
-                        next[index - 1] = { ...next[index - 1], supersetWithNext: false };
-                      }
-                      return next;
-                    });
-                  }}
-                  isLast={index === exercises.length - 1}
-                  isPartOfSuperset={linked}
-                />
-              </div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {/* JSON Preview */}
       {exercises.length > 0 && (
@@ -344,63 +555,120 @@ export function StrictWorkout({
   );
 }
 
-// --- Rest Selector ---
-function RestSelector({
-  label,
-  value,
-  onChange,
+// --- Sortable wrapper ---
+function SortableExerciseItem({
+  id,
+  children,
 }: {
-  label: string;
-  value: string;
-  onChange: (val: string) => void;
+  id: string;
+  children: (handleProps: Record<string, any>) => React.ReactNode;
 }) {
-  const presets = REST_OPTIONS.filter((o) => o !== 'Custom');
-  const isCustomValue = !REST_OPTIONS.includes(value);
-  const [editingCustom, setEditingCustom] = useState(isCustomValue);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
 
   return (
-    <div className="flex items-center gap-3 py-2 overflow-x-auto hide-scrollbar">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">
-        <Clock size={12} />
-        {label}
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {children(listeners ?? {})}
+    </div>
+  );
+}
+
+// --- Rest Card ---
+function formatRestLabel(seconds: number): string {
+  if (seconds === 0) return 'OFF';
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60}min`;
+  return `${seconds}s`;
+}
+
+function RestCard({
+  exercise,
+  onUpdate,
+  onRemove,
+  dragHandleProps,
+}: {
+  exercise: StrictExercise;
+  onUpdate: (updates: Partial<StrictExercise>) => void;
+  onRemove: () => void;
+  dragHandleProps?: Record<string, any>;
+}) {
+  const value = exercise.restDuration ?? 60;
+  const isPreset = REST_PRESET_VALUES.has(value);
+  const [editingCustom, setEditingCustom] = useState(!isPreset);
+
+  return (
+    <div className="flex items-center gap-3 py-3 px-4 rounded-xl bg-gray-50 border border-gray-200 my-1">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <Timer size={16} className="text-gray-400" />
+        <span className="text-sm font-bold text-gray-600">Descanso</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        {presets.map((opt) => (
+      <div className="flex items-center gap-1.5 flex-1 overflow-x-auto hide-scrollbar">
+        {REST_PRESETS.map((p) => (
           <button
-            key={opt}
-            onClick={() => { onChange(opt); setEditingCustom(false); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              value === opt
+            key={p.value}
+            onClick={() => { onUpdate({ restDuration: p.value }); setEditingCustom(false); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              !editingCustom && value === p.value
                 ? 'bg-yellow-400 text-gray-900'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
             }`}
           >
-            {opt}
+            {p.label}
           </button>
         ))}
         {editingCustom ? (
-          <input
-            autoFocus
-            type="text"
-            value={value === 'Custom' ? '' : value}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={() => { if (!value || value === 'Custom') { onChange('OFF'); setEditingCustom(false); } }}
-            placeholder="ex: 45s"
-            className="w-16 px-2 py-1.5 rounded-lg text-xs font-medium border border-yellow-400 text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-yellow-400"
-          />
+          <div className="relative flex-shrink-0">
+            <input
+              autoFocus
+              type="number"
+              min={0}
+              value={value || ''}
+              onChange={(e) => onUpdate({ restDuration: Number(e.target.value) || 0 })}
+              onBlur={() => { if (!value) { onUpdate({ restDuration: 0 }); setEditingCustom(false); } }}
+              placeholder="45"
+              className="w-20 px-2 py-1 pr-7 rounded-lg text-xs font-medium border border-yellow-400 text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">seg</span>
+          </div>
         ) : (
           <button
-            onClick={() => { setEditingCustom(true); if (!isCustomValue) onChange(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              isCustomValue
+            onClick={() => setEditingCustom(true)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              !isPreset
                 ? 'bg-yellow-400 text-gray-900'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
             }`}
           >
-            {isCustomValue && value ? value : 'Outro'}
+            {!isPreset ? formatRestLabel(value) : 'Outro'}
           </button>
         )}
       </div>
+      <button
+        onClick={onRemove}
+        className="p-1.5 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+        title="Remover descanso"
+      >
+        <Trash2 size={14} />
+      </button>
+      <button
+        {...dragHandleProps}
+        className="flex items-center justify-center p-1 text-gray-300 cursor-grab hover:text-gray-500 transition-colors flex-shrink-0 touch-none"
+      >
+        <GripVertical size={16} />
+      </button>
     </div>
   );
 }
@@ -414,7 +682,10 @@ function ExerciseCard({
   onToggleSuperset,
   onUnlinkSuperset,
   isLast,
+  canSuperset,
   isPartOfSuperset,
+  lockType,
+  dragHandleProps,
 }: {
   exercise: StrictExercise;
   onUpdate: (updates: Partial<StrictExercise>) => void;
@@ -423,13 +694,18 @@ function ExerciseCard({
   onToggleSuperset: () => void;
   onUnlinkSuperset: () => void;
   isLast: boolean;
+  canSuperset: boolean;
   isPartOfSuperset: boolean;
+  lockType?: boolean;
+  dragHandleProps?: Record<string, any>;
 }) {
   const config = TYPE_CONFIG[exercise.type];
   const [isTypeOpen, setIsTypeOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
   const [isRepsMenuOpen, setIsRepsMenuOpen] = useState(false);
+  const [customRestSetIds, setCustomRestSetIds] = useState<Set<string>>(
+    () => new Set(exercise.sets.filter((s) => !REST_PRESET_VALUES.has(s.rest)).map((s) => s.id))
+  );
 
   const handleTypeChange = (newType: ExerciseType) => {
     onUpdate({ type: newType, sets: [], repsMode: 'fixed' });
@@ -443,7 +719,7 @@ function ExerciseCard({
     const lastSet = exercise.sets[exercise.sets.length - 1];
     const newSet: StrictSet = lastSet
       ? { ...lastSet, id: uid() }
-      : { id: uid(), rest: '60s' };
+      : { id: uid(), rest: 60 };
     onUpdate({ sets: [...exercise.sets, newSet] });
   };
 
@@ -487,49 +763,55 @@ function ExerciseCard({
         <div className="flex-1 flex flex-col gap-y-3 min-w-0">
           {/* Type Selector */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <button
-                onClick={() => setIsTypeOpen(!isTypeOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${config.bgColor} ${config.textColor} hover:opacity-80`}
-              >
+            {lockType ? (
+              <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold ${config.bgColor} ${config.textColor}`}>
                 {config.label}
-                <ChevronDown size={12} />
-              </button>
+              </span>
+            ) : (
+              <div className="relative">
+                <button
+                  onClick={() => setIsTypeOpen(!isTypeOpen)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${config.bgColor} ${config.textColor} hover:opacity-80`}
+                >
+                  {config.label}
+                  <ChevronDown size={12} />
+                </button>
 
-              <AnimatePresence>
-                {isTypeOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setIsTypeOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                      className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
-                    >
-                      {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((type) => {
-                        const typeConfig = TYPE_CONFIG[type];
-                        const isSelected = exercise.type === type;
-                        return (
-                          <button
-                            key={type}
-                            onClick={() => handleTypeChange(type)}
-                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${
-                              isSelected ? 'bg-gray-50 font-medium text-gray-900' : 'text-gray-600'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className={`w-2 h-2 rounded-full ${typeConfig.bgColor}`} />
-                              {typeConfig.label}
-                            </span>
-                            {isSelected && <Check size={14} className="text-yellow-500" />}
-                          </button>
-                        );
-                      })}
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+                <AnimatePresence>
+                  {isTypeOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setIsTypeOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                        className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
+                      >
+                        {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((type) => {
+                          const typeConfig = TYPE_CONFIG[type];
+                          const isSelected = exercise.type === type;
+                          return (
+                            <button
+                              key={type}
+                              onClick={() => handleTypeChange(type)}
+                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                                isSelected ? 'bg-gray-50 font-medium text-gray-900' : 'text-gray-600'
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${typeConfig.bgColor}`} />
+                                {typeConfig.label}
+                              </span>
+                              {isSelected && <Check size={14} className="text-yellow-500" />}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
 
             <span className="text-xs text-gray-300">·</span>
             <span className="text-xs text-gray-500">{exercise.equipment}</span>
@@ -614,17 +896,28 @@ function ExerciseCard({
 
                     {config.columns.map((col) => (
                       <div key={col.key} className="flex-1 relative">
-                        <input
-                          type={col.type}
-                          value={(set[col.key] as string | number) || ''}
-                          onChange={(e) => updateSet(set.id, col.key, e.target.value)}
-                          placeholder={col.placeholder}
-                          className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
-                        />
-                        {col.suffix && (
-                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
-                            {col.suffix}
-                          </span>
+                        {col.key === 'duration' ? (
+                          <DurationInput
+                            value={(set.duration as string) || ''}
+                            onChange={(masked) => updateSet(set.id, 'duration', masked)}
+                            placeholder={col.placeholder}
+                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
+                          />
+                        ) : (
+                          <>
+                            <input
+                              type={col.type}
+                              value={(set[col.key] as string | number) || ''}
+                              onChange={(e) => updateSet(set.id, col.key, e.target.value)}
+                              placeholder={col.placeholder}
+                              className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                            />
+                            {col.suffix && (
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
+                                {col.suffix}
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
@@ -672,30 +965,40 @@ function ExerciseCard({
 
                     {/* Rest per set */}
                     <div className="w-20 flex-shrink-0">
-                      {!REST_OPTIONS.includes(set.rest) ? (
-                        <input
-                          type="text"
-                          value={set.rest}
-                          onChange={(e) => updateSet(set.id, 'rest', e.target.value)}
-                          onBlur={() => { if (!set.rest) updateSet(set.id, 'rest', 'OFF'); }}
-                          placeholder="ex: 45s"
-                          className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
-                        />
+                      {customRestSetIds.has(set.id) ? (
+                        <div className="relative">
+                          <input
+                            autoFocus
+                            type="number"
+                            min={0}
+                            value={set.rest || ''}
+                            onChange={(e) => updateSet(set.id, 'rest', Number(e.target.value) || 0)}
+                            placeholder="45"
+                            className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all pr-7"
+                          />
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 pointer-events-none">seg</span>
+                        </div>
                       ) : (
                         <select
-                          value={set.rest}
+                          value={REST_PRESET_VALUES.has(set.rest) ? set.rest : 'custom'}
                           onChange={(e) => {
-                            if (e.target.value === 'Custom') {
-                              updateSet(set.id, 'rest', '');
+                            if (e.target.value === 'custom') {
+                              setCustomRestSetIds((prev) => new Set(prev).add(set.id));
                             } else {
-                              updateSet(set.id, 'rest', e.target.value);
+                              updateSet(set.id, 'rest', Number(e.target.value));
+                              setCustomRestSetIds((prev) => {
+                                const next = new Set(prev);
+                                next.delete(set.id);
+                                return next;
+                              });
                             }
                           }}
                           className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-600 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all appearance-none cursor-pointer"
                         >
-                          {REST_OPTIONS.map((opt) => (
-                            <option key={opt} value={opt}>{opt}</option>
+                          {REST_PRESETS.map((p) => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
                           ))}
+                          <option value="custom">Outro</option>
                         </select>
                       )}
                     </div>
@@ -731,13 +1034,6 @@ function ExerciseCard({
             </button>
           </div>
 
-          {/* Rest After Exercise */}
-          <RestSelector
-            label="Descanso próx. exercício"
-            value={exercise.restAfterExercise}
-            onChange={(val) => onUpdate({ restAfterExercise: val })}
-          />
-
           {/* Notes */}
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
@@ -755,7 +1051,8 @@ function ExerciseCard({
         {/* Action buttons – vertical on md+, hidden on mobile (shown below) */}
         <div className="hidden md:flex flex-col items-center justify-start gap-1 flex-shrink-0 pt-1">
           <button
-            className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors"
+            {...dragHandleProps}
+            className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
           >
             <GripVertical size={18} />
           </button>
@@ -785,7 +1082,7 @@ function ExerciseCard({
                         Remover superset
                       </button>
                     )}
-                    {!isLast && !isPartOfSuperset && (
+                    {canSuperset && !exercise.supersetWithNext && (
                       <button
                         onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
                         className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
@@ -819,7 +1116,8 @@ function ExerciseCard({
       {/* Mobile action buttons – horizontal row */}
       <div className="flex md:hidden items-center justify-end gap-1 pt-1 border-t border-gray-100">
         <button
-          className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors"
+          {...dragHandleProps}
+          className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
         >
           <GripVertical size={18} />
         </button>
@@ -849,7 +1147,7 @@ function ExerciseCard({
                       Remover superset
                     </button>
                   )}
-                  {!isLast && !isPartOfSuperset && (
+                  {!isLast && !exercise.supersetWithNext && (
                     <button
                       onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"

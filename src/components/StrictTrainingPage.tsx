@@ -1,32 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   Play,
   Pause,
-  SkipForward,
   Check,
   Clock,
-  ChevronDown,
-  ChevronUp,
-  MoreHorizontal,
-  MessageSquare,
-  RefreshCw,
-  Zap,
   Trophy,
-  Flame,
-  Timer,
-  Dumbbell,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { StrictExercise } from '../types/workout';
+import { formatTime, formatElapsed } from '../utils/formatTime';
 
-// --- Types ---
+// --- Internal types ---
 interface TrainingSet {
   id: string;
   reps?: number;
   weight?: number;
   duration?: string;
   distance?: number;
-  rest: number; // seconds
+  rest: number;
   completed: boolean;
 }
 
@@ -40,9 +34,10 @@ interface TrainingExercise {
   typeColor: string;
   typeBg: string;
   sets: TrainingSet[];
-  restAfterExercise: number; // seconds
   notes: string;
   supersetId?: string;
+  isRest?: boolean;
+  restDuration?: number;
 }
 
 interface SupersetGroup {
@@ -53,622 +48,287 @@ interface SupersetGroup {
   restBetweenRounds: number;
 }
 
-// --- Mock Data ---
-const MOCK_EXERCISES: TrainingExercise[] = [
-  {
-    id: '1',
-    name: 'Supino Reto',
-    thumbnail: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=400&h=300&fit=crop',
-    category: 'Peito',
-    equipment: 'Barra',
-    typeLabel: 'Weight Reps',
-    typeColor: 'text-blue-700',
-    typeBg: 'bg-blue-100',
-    restAfterExercise: 90,
-    notes: '',
-    sets: [
-      { id: 's1', reps: 12, weight: 20, rest: 60, completed: false },
-      { id: 's2', reps: 10, weight: 25, rest: 60, completed: false },
-      { id: 's3', reps: 8, weight: 30, rest: 60, completed: false },
-    ],
-  },
-  {
-    id: '2a',
-    name: 'Rosca Direta',
-    thumbnail: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=400&h=300&fit=crop',
-    category: 'Biceps',
-    equipment: 'Haltere',
-    typeLabel: 'Weight Reps',
-    typeColor: 'text-blue-700',
-    typeBg: 'bg-blue-100',
-    restAfterExercise: 0,
-    notes: '',
-    supersetId: 'ss1',
-    sets: [
-      { id: 's1', reps: 12, weight: 10, rest: 0, completed: false },
-      { id: 's2', reps: 10, weight: 12, rest: 0, completed: false },
-      { id: 's3', reps: 8, weight: 14, rest: 0, completed: false },
-    ],
-  },
-  {
-    id: '2b',
-    name: 'Triceps Corda',
-    thumbnail: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop',
-    category: 'Triceps',
-    equipment: 'Cabo',
-    typeLabel: 'Weight Reps',
-    typeColor: 'text-blue-700',
-    typeBg: 'bg-blue-100',
-    restAfterExercise: 0,
-    notes: '',
-    supersetId: 'ss1',
-    sets: [
-      { id: 's1', reps: 12, weight: 15, rest: 0, completed: false },
-      { id: 's2', reps: 10, weight: 20, rest: 0, completed: false },
-      { id: 's3', reps: 8, weight: 20, rest: 0, completed: false },
-    ],
-  },
-  {
-    id: '3',
-    name: 'Prancha',
-    thumbnail: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&h=300&fit=crop',
-    category: 'Core',
-    equipment: 'Chao',
-    typeLabel: 'Duration',
-    typeColor: 'text-teal-700',
-    typeBg: 'bg-teal-100',
-    restAfterExercise: 60,
-    notes: 'Manter coluna reta',
-    sets: [
-      { id: 's1', duration: '00:45', rest: 30, completed: false },
-      { id: 's2', duration: '01:00', rest: 30, completed: false },
-      { id: 's3', duration: '01:00', rest: 30, completed: false },
-    ],
-  },
-  {
-    id: '4',
-    name: 'Agachamento Bulgaro',
-    thumbnail: 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=400&h=300&fit=crop',
-    category: 'Pernas',
-    equipment: 'Haltere',
-    typeLabel: 'Weight Reps',
-    typeColor: 'text-blue-700',
-    typeBg: 'bg-blue-100',
-    restAfterExercise: 120,
-    notes: '',
-    sets: [
-      { id: 's1', reps: 10, weight: 12, rest: 90, completed: false },
-      { id: 's2', reps: 8, weight: 14, rest: 90, completed: false },
-      { id: 's3', reps: 8, weight: 16, rest: 90, completed: false },
-    ],
-  },
-];
-
-
-
-const MOCK_SUPERSETS: SupersetGroup[] = [
-  {
-    id: 'ss1',
-    label: 'Superset A',
-    exerciseIds: ['2a', '2b'],
-    rounds: 3,
-    restBetweenRounds: 90,
-  },
-];
-
-// --- Helpers ---
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+interface FocusStep {
+  exerciseIndex: number;
+  setIndex: number;
+  restAfterStep: number;
+  isRestStep?: boolean;
+  restStepDuration?: number;
 }
 
-function formatElapsed(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
+// --- Conversion: editor model → execution model ---
+const TYPE_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  weight_reps: { label: 'Weight Reps', color: 'text-blue-700', bg: 'bg-blue-100' },
+  duration: { label: 'Duration', color: 'text-teal-700', bg: 'bg-teal-100' },
+  distance: { label: 'Distance', color: 'text-rose-700', bg: 'bg-rose-100' },
+};
 
-// --- Rest Timer Modal ---
-function RestTimerModal({
-  seconds,
-  onSkip,
-  onAddTime,
-}: {
-  seconds: number;
-  onSkip: () => void;
-  onAddTime: (s: number) => void;
-}) {
-  const progress = seconds > 0 ? 1 : 0;
-  const circumference = 2 * Math.PI * 54;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
-    >
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.8, opacity: 0 }}
-        className="bg-white rounded-3xl p-8 w-80 text-center shadow-2xl"
-      >
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <Clock size={20} className="text-yellow-500" />
-          <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-            Descanso
-          </span>
-        </div>
-
-        <div className="relative w-32 h-32 mx-auto mb-6">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="54" fill="none" stroke="#f3f4f6" strokeWidth="6" />
-            <circle
-              cx="60"
-              cy="60"
-              r="54"
-              fill="none"
-              stroke="#facc15"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - progress)}
-              className="transition-all duration-1000 ease-linear"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-3xl font-bold text-gray-900 tabular-nums">
-              {formatTime(seconds)}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <button
-            onClick={() => onAddTime(-15)}
-            className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-          >
-            -15s
-          </button>
-          <button
-            onClick={() => onAddTime(15)}
-            className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-          >
-            +15s
-          </button>
-          <button
-            onClick={() => onAddTime(30)}
-            className="px-3 py-1.5 text-xs font-bold text-gray-500 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-          >
-            +30s
-          </button>
-        </div>
-
-        <button
-          onClick={onSkip}
-          className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
-        >
-          <SkipForward size={18} />
-          Pular descanso
-        </button>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-
-// --- Editable Set Value ---
-function EditableValue({
-  value,
-  suffix,
-  onChange,
-}: {
-  value: string | number;
-  suffix?: string;
-  onChange: (val: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [tempVal, setTempVal] = useState(String(value));
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        type="text"
-        value={tempVal}
-        onChange={(e) => setTempVal(e.target.value)}
-        onBlur={() => {
-          onChange(tempVal);
-          setEditing(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            onChange(tempVal);
-            setEditing(false);
-          }
-        }}
-        className="w-14 text-center bg-white border border-yellow-400 rounded-md py-0.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
-      />
-    );
+function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingExercise {
+  if (ex.type === 'rest') {
+    return {
+      id: ex.id,
+      name: 'Descanso',
+      thumbnail: '',
+      category: '',
+      equipment: '',
+      typeLabel: 'Rest',
+      typeColor: 'text-gray-500',
+      typeBg: 'bg-gray-100',
+      notes: '',
+      sets: [],
+      isRest: true,
+      restDuration: ex.restDuration ?? 0,
+    };
   }
-
-  return (
-    <button
-      onClick={() => {
-        setTempVal(String(value));
-        setEditing(true);
-      }}
-      className="text-sm font-bold text-gray-700 hover:text-yellow-600 transition-colors tabular-nums cursor-pointer"
-    >
-      {value}
-      {suffix && <span className="text-xs text-gray-400 ml-0.5">{suffix}</span>}
-    </button>
-  );
+  const typeInfo = TYPE_MAP[ex.type] || TYPE_MAP.weight_reps;
+  return {
+    id: ex.id,
+    name: ex.name,
+    thumbnail: ex.thumbnail,
+    category: ex.category,
+    equipment: ex.equipment,
+    typeLabel: typeInfo.label,
+    typeColor: typeInfo.color,
+    typeBg: typeInfo.bg,
+    notes: ex.notes,
+    supersetId,
+    sets: ex.sets.map((s) => ({
+      id: s.id,
+      reps: s.reps,
+      weight: s.weight,
+      duration: s.duration,
+      distance: s.distance,
+      rest: s.rest,
+      completed: false,
+    })),
+  };
 }
 
-// --- Exercise Actions Menu ---
-function ExerciseActionsMenu({ onClose }: { onClose: () => void }) {
-  const actions = [
-    { icon: RefreshCw, label: 'Trocar exercicio', color: 'text-gray-600' },
-    { icon: MessageSquare, label: 'Adicionar nota', color: 'text-gray-600' },
-    { icon: SkipForward, label: 'Pular exercicio', color: 'text-orange-500' },
-  ];
+function buildSupersetGroups(exercises: StrictExercise[]): {
+  trainingExercises: TrainingExercise[];
+  supersets: SupersetGroup[];
+} {
+  const trainingExercises: TrainingExercise[] = [];
+  const supersets: SupersetGroup[] = [];
+  let ssCounter = 0;
+  let i = 0;
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-30 py-1 overflow-hidden"
-    >
-      {actions.map((action) => (
-        <button
-          key={action.label}
-          onClick={onClose}
-          className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors"
-        >
-          <action.icon size={16} className={action.color} />
-          <span className={action.color}>{action.label}</span>
-        </button>
-      ))}
-    </motion.div>
-  );
+  while (i < exercises.length) {
+    // Rest items never join superset groups
+    if (exercises[i].type === 'rest') {
+      trainingExercises.push(toTrainingExercise(exercises[i]));
+      i++;
+      continue;
+    }
+
+    if (exercises[i].supersetWithNext) {
+      ssCounter++;
+      const ssId = `ss${ssCounter}`;
+      const ssLabel = `Superset ${String.fromCharCode(64 + ssCounter)}`;
+      const ids: string[] = [];
+      let j = i;
+      while (j < exercises.length && exercises[j].supersetWithNext && exercises[j].type !== 'rest') {
+        const te = toTrainingExercise(exercises[j], ssId);
+        trainingExercises.push(te);
+        ids.push(te.id);
+        j++;
+      }
+      if (j < exercises.length && exercises[j].type !== 'rest') {
+        const te = toTrainingExercise(exercises[j], ssId);
+        trainingExercises.push(te);
+        ids.push(te.id);
+        j++;
+      }
+      supersets.push({ id: ssId, label: ssLabel, exerciseIds: ids, rounds: 1, restBetweenRounds: 90 });
+      i = j;
+    } else {
+      trainingExercises.push(toTrainingExercise(exercises[i]));
+      i++;
+    }
+  }
+  return { trainingExercises, supersets };
 }
 
-// --- Training Set Row ---
-function TrainingSetRow({
-  set,
-  index,
-  isActive,
-  hasWeight,
-  hasDuration,
-  onToggle,
-  onUpdateSet,
+// --- Build linear focus-step sequence ---
+function buildFocusSteps(
+  exercises: TrainingExercise[],
+  supersets: SupersetGroup[]
+): FocusStep[] {
+  const steps: FocusStep[] = [];
+  const processed = new Set<number>();
+
+  for (let i = 0; i < exercises.length; i++) {
+    if (processed.has(i)) continue;
+    const ex = exercises[i];
+
+    // Rest items become rest steps
+    if (ex.isRest) {
+      processed.add(i);
+      if (ex.restDuration && ex.restDuration > 0) {
+        steps.push({
+          exerciseIndex: i,
+          setIndex: 0,
+          restAfterStep: 0,
+          isRestStep: true,
+          restStepDuration: ex.restDuration,
+        });
+      }
+      continue;
+    }
+
+    const ss = supersets.find((s) => s.exerciseIds.includes(ex.id));
+
+    if (ss) {
+      // Superset: interleave sets in rounds
+      const ssIndices = ss.exerciseIds
+        .map((id) => exercises.findIndex((e) => e.id === id))
+        .filter((idx) => idx >= 0);
+      ssIndices.forEach((idx) => processed.add(idx));
+
+      const maxSets = Math.max(...ssIndices.map((idx) => exercises[idx].sets.length));
+      for (let setIdx = 0; setIdx < maxSets; setIdx++) {
+        for (let k = 0; k < ssIndices.length; k++) {
+          const exIdx = ssIndices[k];
+          if (setIdx >= exercises[exIdx].sets.length) continue;
+
+          const isLastInRound = k === ssIndices.length - 1;
+          let restAfter = 0;
+
+          if (isLastInRound && setIdx < maxSets - 1) {
+            // End of a round, rest between rounds
+            restAfter = ss.restBetweenRounds;
+          } else if (!isLastInRound) {
+            // Between exercises within a round (typically 0 for supersets)
+            restAfter = exercises[exIdx].sets[setIdx].rest;
+          }
+          // Last set of last round: restAfter = 0, the next rest item (if any) handles it
+          steps.push({ exerciseIndex: exIdx, setIndex: setIdx, restAfterStep: restAfter });
+        }
+      }
+    } else {
+      // Standalone exercise
+      processed.add(i);
+      for (let setIdx = 0; setIdx < ex.sets.length; setIdx++) {
+        const isLastSet = setIdx === ex.sets.length - 1;
+        // For intermediate sets use set.rest; for last set use 0 (rest item handles it)
+        const restAfter = isLastSet ? 0 : ex.sets[setIdx].rest;
+        steps.push({ exerciseIndex: i, setIndex: setIdx, restAfterStep: restAfter });
+      }
+    }
+  }
+  return steps;
+}
+
+// --- Format set info label (used in summary) ---
+
+// --- Thumbnail strip ---
+function ThumbnailStrip({
+  exercises,
+  supersets,
+  currentExerciseIndex,
+  completedSetIds,
 }: {
-  set: TrainingSet;
-  index: number;
-  isActive: boolean;
-  hasWeight: boolean;
-  hasDuration: boolean;
-  onToggle: () => void;
-  onUpdateSet: (field: string, value: string) => void;
+  exercises: TrainingExercise[];
+  supersets: SupersetGroup[];
+  currentExerciseIndex: number;
+  completedSetIds: Set<string>;
 }) {
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer group ${
-        set.completed
-          ? 'bg-green-50 border border-green-200'
-          : isActive
-          ? 'bg-yellow-50 border border-yellow-200'
-          : 'bg-gray-50 border border-transparent hover:bg-gray-100'
-      }`}
-      onClick={onToggle}
-    >
-      {/* Check circle */}
-      <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          set.completed
-            ? 'bg-green-500 text-white'
-            : isActive
-            ? 'border-2 border-yellow-400 bg-yellow-50'
-            : 'border-2 border-gray-200 bg-white'
-        }`}
-      >
-        {set.completed ? (
-          <Check size={16} strokeWidth={3} />
-        ) : (
-          <span className="text-xs font-bold text-gray-400">{index + 1}</span>
-        )}
-      </div>
+  type ThumbItem =
+    | { type: 'single'; exerciseIndex: number }
+    | { type: 'superset'; label: string; exerciseIndices: number[] };
 
-      {/* Set details */}
-      <div className="flex-1 flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-        {hasWeight && set.weight !== undefined && (
-          <div className="flex items-center gap-1">
-            <EditableValue
-              value={set.weight}
-              suffix="kg"
-              onChange={(v) => onUpdateSet('weight', v)}
-            />
-          </div>
-        )}
-        {set.reps !== undefined && (
-          <div className="flex items-center gap-1">
-            <EditableValue
-              value={set.reps}
-              suffix="reps"
-              onChange={(v) => onUpdateSet('reps', v)}
-            />
-          </div>
-        )}
-        {hasDuration && set.duration && (
-          <div className="flex items-center gap-1">
-            <EditableValue
-              value={set.duration}
-              onChange={(v) => onUpdateSet('duration', v)}
-            />
-          </div>
-        )}
-      </div>
+  const items: ThumbItem[] = [];
+  const processed = new Set<number>();
 
-      {/* Status indicator */}
-      <div
-        className={`text-xs font-bold uppercase tracking-wide ${
-          set.completed ? 'text-green-500' : 'text-gray-300'
-        }`}
-      >
-        {set.completed ? 'Feito' : 'Toque'}
-      </div>
-    </motion.div>
-  );
-}
-
-// --- Training Exercise Card ---
-function TrainingExerciseCard({
-  exercise,
-  isExpanded,
-  isActiveExercise,
-  onToggleExpand,
-  onToggleSet,
-  onUpdateSet,
-}: {
-  exercise: TrainingExercise;
-  isExpanded: boolean;
-  isActiveExercise: boolean;
-  onToggleExpand: () => void;
-  onToggleSet: (setId: string) => void;
-  onUpdateSet: (setId: string, field: string, value: string) => void;
-}) {
-  const [showMenu, setShowMenu] = useState(false);
-  const completedSets = exercise.sets.filter((s) => s.completed).length;
-  const totalSets = exercise.sets.length;
-  const allDone = completedSets === totalSets;
-  const hasWeight = exercise.sets.some((s) => s.weight !== undefined);
-  const hasDuration = exercise.sets.some((s) => s.duration !== undefined);
-  const nextSetIndex = exercise.sets.findIndex((s) => !s.completed);
+  exercises.forEach((ex, idx) => {
+    if (processed.has(idx)) return;
+    if (ex.isRest) { processed.add(idx); return; }
+    const ss = supersets.find((s) => s.exerciseIds.includes(ex.id));
+    if (ss) {
+      const indices = ss.exerciseIds
+        .map((id) => exercises.findIndex((e) => e.id === id))
+        .filter((i) => i >= 0);
+      indices.forEach((i) => processed.add(i));
+      items.push({ type: 'superset', label: ss.label, exerciseIndices: indices });
+    } else {
+      processed.add(idx);
+      items.push({ type: 'single', exerciseIndex: idx });
+    }
+  });
 
   return (
-    <motion.div
-      layout
-      className={`bg-white rounded-2xl border overflow-hidden transition-all ${
-        isActiveExercise
-          ? 'border-yellow-300 shadow-lg shadow-yellow-100/50'
-          : allDone
-          ? 'border-green-200 bg-green-50/30'
-          : 'border-gray-100 shadow-sm'
-      }`}
-    >
-      {/* Card Header - Always visible, clickable */}
-      <button
-        onClick={onToggleExpand}
-        className="w-full flex items-center gap-4 p-4 text-left hover:bg-gray-50/50 transition-colors"
-      >
-        <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
-          <img
-            src={exercise.thumbnail}
-            alt={exercise.name}
-            className={`w-full h-full object-cover ${allDone ? 'opacity-50' : ''}`}
-          />
-          {allDone && (
-            <div className="absolute inset-0 flex items-center justify-center bg-green-500/20">
-              <Check size={24} className="text-green-600" strokeWidth={3} />
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3
-              className={`font-bold text-base truncate ${
-                allDone ? 'text-green-700 line-through decoration-2' : 'text-gray-900'
-              }`}
-            >
-              {exercise.name}
-            </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide ${exercise.typeBg} ${exercise.typeColor}`}
-            >
-              {exercise.typeLabel}
-            </span>
-            <span className="text-xs text-gray-400">{exercise.equipment}</span>
-          </div>
-        </div>
-
-        {/* Progress indicator */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="text-right">
-            <div className="text-sm font-bold text-gray-900">
-              {completedSets}/{totalSets}
-            </div>
-            <div className="text-[10px] text-gray-400 uppercase">series</div>
-          </div>
-          <div className="relative w-10 h-10">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              <circle
-                cx="18"
-                cy="18"
-                r="15"
-                fill="none"
-                stroke="#f3f4f6"
-                strokeWidth="3"
-              />
-              <circle
-                cx="18"
-                cy="18"
-                r="15"
-                fill="none"
-                stroke={allDone ? '#22c55e' : '#facc15'}
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={2 * Math.PI * 15}
-                strokeDashoffset={
-                  2 * Math.PI * 15 * (1 - completedSets / totalSets)
-                }
-                className="transition-all duration-500"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              {isExpanded ? (
-                <ChevronUp size={14} className="text-gray-400" />
-              ) : (
-                <ChevronDown size={14} className="text-gray-400" />
+    <div className="flex gap-2 overflow-x-auto pb-3 mb-4 hide-scrollbar -mx-6 px-6">
+      {items.map((item) => {
+        if (item.type === 'single') {
+          const ex = exercises[item.exerciseIndex];
+          const isCurrent = item.exerciseIndex === currentExerciseIndex;
+          const allDone = ex.sets.every((s) => completedSetIds.has(s.id));
+          return (
+            <div key={ex.id} className="relative flex-shrink-0">
+              <div
+                className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${
+                  isCurrent
+                    ? 'border-yellow-400 shadow-md shadow-yellow-200/50'
+                    : allDone
+                    ? 'border-green-300 opacity-60'
+                    : 'border-transparent'
+                }`}
+              >
+                <img src={ex.thumbnail} alt={ex.name} className="w-full h-full object-cover" />
+              </div>
+              {allDone && (
+                <div className="absolute inset-0 rounded-xl bg-green-500/20 flex items-center justify-center">
+                  <Check size={18} className="text-green-600" strokeWidth={3} />
+                </div>
               )}
             </div>
-          </div>
-        </div>
-      </button>
-
-      {/* Expanded Content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4 space-y-2">
-              {/* Quick actions bar */}
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
-                <div className="flex items-center gap-2">
-                  {exercise.restAfterExercise > 0 && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
-                      <Timer size={12} className="text-gray-500" />
-                      <span className="text-xs font-bold text-gray-600">
-                        Próx: {exercise.restAfterExercise}s
-                      </span>
-                    </div>
-                  )}
-                  {exercise.notes && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-full">
-                      <MessageSquare size={12} className="text-amber-500" />
-                      <span className="text-xs font-medium text-amber-600 truncate max-w-[120px]">
-                        {exercise.notes}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowMenu(!showMenu)}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
-                  <AnimatePresence>
-                    {showMenu && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-20"
-                          onClick={() => setShowMenu(false)}
-                        />
-                        <ExerciseActionsMenu onClose={() => setShowMenu(false)} />
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
+          );
+        } else {
+          const isGroupActive = item.exerciseIndices.includes(currentExerciseIndex);
+          return (
+            <div
+              key={item.label}
+              className={`flex-shrink-0 rounded-xl p-1.5 border-2 transition-all ${
+                isGroupActive ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'
+              }`}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <div className={`w-2 h-2 rounded-full ${isGroupActive ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                <span className={`text-[10px] font-bold ${isGroupActive ? 'text-blue-600' : 'text-gray-400'}`}>
+                  {item.label}
+                </span>
               </div>
-
-              {/* Sets */}
-              <div className="space-y-2">
-                {exercise.sets.map((set, idx) => (
-                  <TrainingSetRow
-                    key={set.id}
-                    set={set}
-                    index={idx}
-                    isActive={idx === nextSetIndex}
-                    hasWeight={hasWeight}
-                    hasDuration={hasDuration}
-                    onToggle={() => onToggleSet(set.id)}
-                    onUpdateSet={(field, value) =>
-                      onUpdateSet(set.id, field, value)
-                    }
-                  />
-                ))}
+              <div className="flex gap-1">
+                {item.exerciseIndices.map((exIdx) => {
+                  const ex = exercises[exIdx];
+                  const isThis = exIdx === currentExerciseIndex;
+                  const allDone = ex.sets.every((s) => completedSetIds.has(s.id));
+                  return (
+                    <div key={ex.id} className="relative">
+                      <div
+                        className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                          isThis
+                            ? 'border-yellow-400'
+                            : allDone
+                            ? 'border-green-300 opacity-60'
+                            : 'border-transparent'
+                        }`}
+                      >
+                        <img src={ex.thumbnail} alt={ex.name} className="w-full h-full object-cover" />
+                      </div>
+                      {allDone && (
+                        <div className="absolute inset-0 rounded-lg bg-green-500/20 flex items-center justify-center">
+                          <Check size={14} className="text-green-600" strokeWidth={3} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-// --- Superset Wrapper ---
-function SupersetWrapper({
-  superset,
-  exercises,
-  expandedId,
-  activeExerciseId,
-  onToggleExpand,
-  onToggleSet,
-  onUpdateSet,
-}: {
-  superset: SupersetGroup;
-  exercises: TrainingExercise[];
-  expandedId: string | null;
-  activeExerciseId: string;
-  onToggleExpand: (id: string) => void;
-  onToggleSet: (exerciseId: string, setId: string) => void;
-  onUpdateSet: (exerciseId: string, setId: string, field: string, value: string) => void;
-}) {
-  return (
-    <div className="relative pl-4">
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 rounded-full" />
-      <div className="flex items-center gap-2 mb-3 pl-1">
-        <div className="flex items-center gap-1.5 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-bold uppercase tracking-wide">
-          <Zap size={12} fill="currentColor" />
-          {superset.label}
-        </div>
-        <span className="text-xs text-gray-400">
-          {superset.rounds} rodadas · {superset.restBetweenRounds}s descanso
-        </span>
-      </div>
-      <div className="space-y-3">
-        {exercises.map((ex) => (
-          <TrainingExerciseCard
-            key={ex.id}
-            exercise={ex}
-            isExpanded={expandedId === ex.id}
-            isActiveExercise={activeExerciseId === ex.id}
-            onToggleExpand={() => onToggleExpand(ex.id)}
-            onToggleSet={(setId) => onToggleSet(ex.id, setId)}
-            onUpdateSet={(setId, field, value) =>
-              onUpdateSet(ex.id, setId, field, value)
-            }
-          />
-        ))}
-      </div>
+          );
+        }
+      })}
     </div>
   );
 }
@@ -676,23 +336,23 @@ function SupersetWrapper({
 // --- Summary Modal ---
 function SummaryModal({
   exercises,
+  completedSetIds,
   elapsed,
   onClose,
 }: {
   exercises: TrainingExercise[];
+  completedSetIds: Set<string>;
   elapsed: number;
   onClose: () => void;
 }) {
-  const totalSets = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
-  const completedSets = exercises.reduce(
-    (acc, ex) => acc + ex.sets.filter((s) => s.completed).length,
-    0
-  );
-  const totalVolume = exercises.reduce(
+  const nonRestExercises = exercises.filter((ex) => !ex.isRest);
+  const totalSets = nonRestExercises.reduce((acc, ex) => acc + ex.sets.length, 0);
+  const completedCount = completedSetIds.size;
+  const totalVolume = nonRestExercises.reduce(
     (acc, ex) =>
       acc +
       ex.sets
-        .filter((s) => s.completed)
+        .filter((s) => completedSetIds.has(s.id))
         .reduce((a, s) => a + (s.weight || 0) * (s.reps || 0), 0),
     0
   );
@@ -722,16 +382,12 @@ function SummaryModal({
             <div className="text-[10px] text-gray-400 uppercase font-bold">Duracao</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
-            <div className="text-lg font-bold text-gray-900">
-              {completedSets}/{totalSets}
-            </div>
+            <div className="text-lg font-bold text-gray-900">{completedCount}/{totalSets}</div>
             <div className="text-[10px] text-gray-400 uppercase font-bold">Series</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
             <div className="text-lg font-bold text-gray-900">
-              {totalVolume > 1000
-                ? `${(totalVolume / 1000).toFixed(1)}t`
-                : `${totalVolume}kg`}
+              {totalVolume > 1000 ? `${(totalVolume / 1000).toFixed(1)}t` : `${totalVolume}kg`}
             </div>
             <div className="text-[10px] text-gray-400 uppercase font-bold">Volume</div>
           </div>
@@ -748,259 +404,469 @@ function SummaryModal({
   );
 }
 
-// --- Main Page ---
-export function StrictTrainingPage({ onBack }: { onBack?: () => void }) {
-  const [exercises, setExercises] = useState<TrainingExercise[]>(MOCK_EXERCISES);
-  const [expandedId, setExpandedId] = useState<string | null>(MOCK_EXERCISES[0]?.id || null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [restTimer, setRestTimer] = useState<number | null>(null);
-  const [showSummary, setShowSummary] = useState(false);
-
-  // Find first non-completed exercise
-  const activeExerciseId =
-    exercises.find((ex) => ex.sets.some((s) => !s.completed))?.id || exercises[0]?.id || '';
-
-  // Total progress
-  const totalSets = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
-  const completedSets = exercises.reduce(
-    (acc, ex) => acc + ex.sets.filter((s) => s.completed).length,
-    0
+// ========== Main Page ==========
+export function StrictTrainingPage({
+  sourceExercises,
+  onBack,
+}: {
+  sourceExercises: StrictExercise[];
+  onBack: () => void;
+}) {
+  const { trainingExercises: initialExercises, supersets } = useMemo(
+    () => buildSupersetGroups(sourceExercises),
+    [sourceExercises]
   );
-  const progress = totalSets > 0 ? completedSets / totalSets : 0;
-
-  // Elapsed timer
-  useEffect(() => {
-    if (!isRunning) return;
-    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(interval);
-  }, [isRunning]);
-
-  // Rest timer countdown
-  useEffect(() => {
-    if (restTimer === null || restTimer <= 0) return;
-    const interval = setInterval(() => {
-      setRestTimer((t) => {
-        if (t === null || t <= 1) return null;
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [restTimer]);
-
-  const toggleExpand = useCallback((id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  }, []);
-
-  const toggleSet = useCallback(
-    (exerciseId: string, setId: string) => {
-      setExercises((prev) =>
-        prev.map((ex) => {
-          if (ex.id !== exerciseId) return ex;
-          const newSets = ex.sets.map((s) =>
-            s.id === setId ? { ...s, completed: !s.completed } : s
-          );
-          // If we just completed a set, show appropriate rest timer
-          const set = ex.sets.find((s) => s.id === setId);
-          if (set && !set.completed) {
-            const allCompleted = newSets.every((s) => s.completed);
-            if (allCompleted && ex.restAfterExercise > 0) {
-              setRestTimer(ex.restAfterExercise);
-            } else if (!allCompleted && set.rest > 0) {
-              setRestTimer(set.rest);
-            }
-          }
-          return { ...ex, sets: newSets };
-        })
-      );
-      // Auto-start timer on first interaction
-      if (!isRunning) setIsRunning(true);
-    },
-    [isRunning]
+  const [trainingExercises, setTrainingExercises] = useState(initialExercises);
+  const focusSteps = useMemo(
+    () => buildFocusSteps(trainingExercises, supersets),
+    [trainingExercises, supersets]
   );
 
-  const updateSet = useCallback(
-    (exerciseId: string, setId: string, field: string, value: string) => {
-      setExercises((prev) =>
-        prev.map((ex) => {
-          if (ex.id !== exerciseId) return ex;
-          return {
-            ...ex,
-            sets: ex.sets.map((s) =>
-              s.id === setId
-                ? {
-                    ...s,
-                    [field]: field === 'duration' ? value : Number(value) || 0,
-                  }
-                : s
-            ),
-          };
-        })
+  const updateSetField = useCallback(
+    (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => {
+      setTrainingExercises((prev) =>
+        prev.map((ex, ei) =>
+          ei === exerciseIndex
+            ? {
+                ...ex,
+                sets: ex.sets.map((s, si) =>
+                  si === setIndex ? { ...s, [field]: value } : s
+                ),
+              }
+            : ex
+        )
       );
     },
     []
   );
 
-  const handleFinish = () => {
-    setIsRunning(false);
-    setShowSummary(true);
-  };
+  const [currentStepIdx, setCurrentStepIdx] = useState(0);
+  const [completedSetIds, setCompletedSetIds] = useState<Set<string>>(new Set());
+  const [elapsed, setElapsed] = useState(0);
+  const [stepTimer, setStepTimer] = useState(0);
+  const [isRunning, setIsRunning] = useState(true);
+  const [restCountdown, setRestCountdown] = useState<number | null>(null);
+  const [restInitial, setRestInitial] = useState(0);
+  const [showSummary, setShowSummary] = useState(false);
 
-  // Group exercises: standalone vs superset
-  const renderItems: React.ReactNode[] = [];
-  const rendered = new Set<string>();
+  const isResting = restCountdown !== null && restCountdown > 0;
 
-  exercises.forEach((ex) => {
-    if (rendered.has(ex.id)) return;
+  // Refs for stable callbacks
+  const stateRef = useRef({ currentStepIdx, focusSteps });
+  stateRef.current = { currentStepIdx, focusSteps };
 
-    const superset = MOCK_SUPERSETS.find((ss) => ss.exerciseIds.includes(ex.id));
-    if (superset) {
-      superset.exerciseIds.forEach((id) => rendered.add(id));
-      const ssExercises = superset.exerciseIds
-        .map((id) => exercises.find((e) => e.id === id))
-        .filter(Boolean) as TrainingExercise[];
+  const currentStep = focusSteps[currentStepIdx];
+  const currentExercise = currentStep ? trainingExercises[currentStep.exerciseIndex] : null;
+  const currentSet = currentExercise?.sets[currentStep?.setIndex ?? 0] ?? null;
 
-      renderItems.push(
-        <SupersetWrapper
-          key={superset.id}
-          superset={superset}
-          exercises={ssExercises}
-          expandedId={expandedId}
-          activeExerciseId={activeExerciseId}
-          onToggleExpand={toggleExpand}
-          onToggleSet={toggleSet}
-          onUpdateSet={updateSet}
-        />
-      );
-    } else {
-      rendered.add(ex.id);
-      renderItems.push(
-        <TrainingExerciseCard
-          key={ex.id}
-          exercise={ex}
-          isExpanded={expandedId === ex.id}
-          isActiveExercise={activeExerciseId === ex.id}
-          onToggleExpand={() => toggleExpand(ex.id)}
-          onToggleSet={(setId) => toggleSet(ex.id, setId)}
-          onUpdateSet={(setId, field, value) => updateSet(ex.id, setId, field, value)}
-        />
-      );
+  // --- Timers ---
+  // Elapsed total time
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  // Per-step timer (resets on step change)
+  useEffect(() => {
+    setStepTimer(0);
+  }, [currentStepIdx]);
+
+  useEffect(() => {
+    if (!isRunning || isResting) return;
+    const id = setInterval(() => setStepTimer((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [isRunning, isResting]);
+
+  // Rest countdown
+  useEffect(() => {
+    if (!isRunning || restCountdown === null || restCountdown <= 0) return;
+    const id = setInterval(() => {
+      setRestCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : null));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, restCountdown]);
+
+  // Advance to next step
+  const advanceStep = useCallback(() => {
+    const { currentStepIdx: idx, focusSteps: steps } = stateRef.current;
+    setRestCountdown(null);
+    if (idx >= steps.length - 1) {
+      setIsRunning(false);
+      setShowSummary(true);
+      return;
     }
-  });
+    setCurrentStepIdx(idx + 1);
+  }, []);
+
+  // Auto-start rest countdown when landing on a rest step
+  useEffect(() => {
+    const step = focusSteps[currentStepIdx];
+    if (step?.isRestStep && step.restStepDuration && step.restStepDuration > 0) {
+      setRestCountdown(step.restStepDuration);
+      setRestInitial(step.restStepDuration);
+    }
+  }, [currentStepIdx, focusSteps]);
+
+  // Auto-advance when rest reaches 0
+  useEffect(() => {
+    if (restCountdown === 0) {
+      advanceStep();
+    }
+  }, [restCountdown, advanceStep]);
+
+  // --- Handlers ---
+  const handleNext = useCallback(() => {
+    if (isResting) {
+      // Skip rest
+      advanceStep();
+      return;
+    }
+    if (!currentSet || !currentStep) return;
+
+    // Mark set completed
+    setCompletedSetIds((prev) => {
+      const next = new Set(prev);
+      next.add(currentSet.id);
+      return next;
+    });
+
+    // Start rest or advance
+    const rest = currentStep.restAfterStep;
+    if (rest > 0 && stateRef.current.currentStepIdx < stateRef.current.focusSteps.length - 1) {
+      setRestCountdown(rest);
+      setRestInitial(rest);
+    } else {
+      advanceStep();
+    }
+  }, [isResting, currentSet, currentStep, advanceStep]);
+
+  const handlePrev = useCallback(() => {
+    if (isResting) {
+      setRestCountdown(null);
+      return;
+    }
+    if (currentStepIdx > 0) {
+      setCurrentStepIdx((prev) => prev - 1);
+    }
+  }, [isResting, currentStepIdx]);
+
+
+  // --- Derived values ---
+  const isOnRestStep = currentStep?.isRestStep === true;
+
+  // Count only non-rest focus steps for progress
+  const totalActionSteps = focusSteps.filter((s) => !s.isRestStep).length;
+  const progress = totalActionSteps > 0
+    ? Math.round((completedSetIds.size / totalActionSteps) * 100)
+    : 0;
+
+  const nextRestDuration = !isResting ? (currentStep?.restAfterStep ?? 0) : 0;
+
+  // Rest progress for the visual ring
+  const restProgress = isResting && restInitial > 0 ? (restCountdown ?? 0) / restInitial : 0;
+
+  // For rest steps, find the next exercise to show its info
+  const displayExercise = isOnRestStep
+    ? (() => {
+        // Look for the next non-rest exercise after current step
+        for (let s = currentStepIdx + 1; s < focusSteps.length; s++) {
+          const ex = trainingExercises[focusSteps[s].exerciseIndex];
+          if (!ex.isRest) return ex;
+        }
+        // Fallback to previous non-rest exercise
+        for (let s = currentStepIdx - 1; s >= 0; s--) {
+          const ex = trainingExercises[focusSteps[s].exerciseIndex];
+          if (!ex.isRest) return ex;
+        }
+        return null;
+      })()
+    : currentExercise;
+
+  if (!currentStep || (!isOnRestStep && (!currentExercise || !currentSet))) return null;
+
+  const setLabel = isOnRestStep
+    ? 'Descanso'
+    : `Serie ${currentStep.setIndex + 1} de ${currentExercise!.sets.length}`;
+  const mainTimerValue = isResting ? (restCountdown ?? 0) : stepTimer;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onBack}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <ArrowLeft size={20} className="text-gray-600" />
-              </button>
-              <div>
-                <h1 className="font-bold text-gray-900 text-base">Treino Restrito</h1>
-                <p className="text-xs text-gray-400">00 Novo treino 27 jan</p>
+    <div className="min-h-screen flex items-start justify-center bg-black">
+     <div className="w-full max-w-lg flex flex-col min-h-screen">
+      {/* ===== Hero image ===== */}
+      <div className="relative flex-shrink-0 h-[52vh] min-h-[280px]">
+        <AnimatePresence mode="wait">
+          {(displayExercise?.thumbnail) ? (
+            <motion.img
+              key={displayExercise.id}
+              src={displayExercise.thumbnail}
+              alt={displayExercise.name}
+              className="absolute inset-0 w-full h-full object-cover"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isResting || isOnRestStep ? 0.4 : 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            />
+          ) : (
+            <motion.div
+              key="rest-bg"
+              className="absolute inset-0 bg-gray-900"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Top gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/10 pointer-events-none" />
+
+        {/* Back button */}
+        <button
+          onClick={onBack}
+          className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center text-white z-10"
+        >
+          <ArrowLeft size={20} />
+        </button>
+
+        {/* Rest overlay badge */}
+        <AnimatePresence>
+          {isResting && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center z-10"
+            >
+              <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-8 py-4 flex flex-col items-center gap-2">
+                {/* Rest ring */}
+                <div className="relative w-24 h-24">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
+                    <circle
+                      cx="48" cy="48" r="42" fill="none"
+                      stroke="#facc15" strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 42}
+                      strokeDashoffset={2 * Math.PI * 42 * (1 - restProgress)}
+                      className="transition-all duration-1000 ease-linear"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-black text-white tabular-nums">
+                      {formatTime(restCountdown ?? 0)}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Descanso</span>
               </div>
-            </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <div className="flex items-center gap-3">
-              {/* Timer */}
-              <button
-                onClick={() => setIsRunning(!isRunning)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${
-                  isRunning
-                    ? 'bg-yellow-100 text-yellow-700'
-                    : 'bg-gray-100 text-gray-500'
+        {/* Set dots overlay (bottom-right of hero) */}
+        <div className="absolute bottom-4 right-4 flex gap-1.5 z-10">
+          {!isOnRestStep && currentExercise && currentExercise.sets.map((s, i) => {
+            const done = completedSetIds.has(s.id);
+            const isCurrent = i === currentStep.setIndex && !isResting;
+            return (
+              <div
+                key={s.id}
+                className={`w-2.5 h-2.5 rounded-full transition-all ${
+                  done
+                    ? 'bg-green-400'
+                    : isCurrent
+                    ? 'bg-yellow-400 scale-125'
+                    : 'bg-white/40'
                 }`}
-              >
-                {isRunning ? <Pause size={14} /> : <Play size={14} />}
-                <span className="tabular-nums">{formatElapsed(elapsed)}</span>
-              </button>
-
-              {/* Finish button */}
-              <button
-                onClick={handleFinish}
-                className="px-4 py-1.5 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-gray-800 transition-colors"
-              >
-                Finalizar
-              </button>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-yellow-400 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress * 100}%` }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
               />
-            </div>
-            <span className="text-xs font-bold text-gray-500 tabular-nums min-w-[4ch] text-right">
-              {Math.round(progress * 100)}%
-            </span>
-          </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Exercise stats bar */}
-      <div className="max-w-2xl mx-auto px-4 py-4">
-        <div className="flex items-center gap-2 mb-6 overflow-x-auto hide-scrollbar">
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl border border-gray-100 shadow-sm flex-shrink-0">
-            <Dumbbell size={14} className="text-gray-400" />
-            <span className="text-xs font-bold text-gray-600">
-              {exercises.length} exercicios
+      {/* ===== Bottom panel ===== */}
+      <div className="flex-1 bg-white rounded-t-3xl -mt-5 relative z-10 flex flex-col px-6 pt-6 pb-6 min-h-0">
+        {/* Exercise name */}
+        <h2 className="text-2xl font-black text-gray-900 truncate mb-0.5">
+          {isOnRestStep ? 'Descanso' : (displayExercise?.name ?? '')}
+        </h2>
+
+        {/* Set label + type badge */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs text-gray-400">{setLabel}</span>
+          {!isOnRestStep && currentExercise && (
+            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${currentExercise.typeBg} ${currentExercise.typeColor}`}>
+              {currentExercise.typeLabel}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl border border-gray-100 shadow-sm flex-shrink-0">
-            <Flame size={14} className="text-orange-400" />
-            <span className="text-xs font-bold text-gray-600">
-              {completedSets} de {totalSets} series
+          )}
+          {!isOnRestStep && currentExercise?.notes && (
+            <span className="text-[10px] text-gray-400 truncate max-w-[140px]">
+              {currentExercise.notes}
             </span>
-          </div>
-          {MOCK_SUPERSETS.length > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl border border-gray-100 shadow-sm flex-shrink-0">
-              <Zap size={14} className="text-yellow-500" />
-              <span className="text-xs font-bold text-gray-600">
-                {MOCK_SUPERSETS.length} superset
-              </span>
-            </div>
+          )}
+          {isOnRestStep && displayExercise && (
+            <span className="text-[10px] text-gray-400">
+              Proximo: {displayExercise.name}
+            </span>
           )}
         </div>
 
-        {/* Exercise list */}
-        <div className="space-y-4 pb-32">
-          {renderItems}
+        {/* Set detail cards */}
+        {!isOnRestStep && currentSet && (
+          <div className="flex gap-3 mb-5">
+            {/* Reps */}
+            {currentSet.reps !== undefined && (
+              <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-black text-gray-900 tabular-nums">{currentSet.reps}</div>
+                <div className="text-[10px] text-gray-400 uppercase font-bold">Reps</div>
+              </div>
+            )}
+            {/* Weight — editable */}
+            {currentSet.weight !== undefined && (
+              <div className="flex-1 bg-yellow-50 rounded-xl p-3 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() =>
+                      updateSetField(
+                        currentStep.exerciseIndex,
+                        currentStep.setIndex,
+                        'weight',
+                        Math.max(0, (currentSet.weight ?? 0) - 2.5)
+                      )
+                    }
+                    className="w-7 h-7 rounded-lg bg-yellow-100 text-yellow-700 flex items-center justify-center hover:bg-yellow-200 transition-colors"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <input
+                    type="number"
+                    value={currentSet.weight ?? 0}
+                    onChange={(e) =>
+                      updateSetField(
+                        currentStep.exerciseIndex,
+                        currentStep.setIndex,
+                        'weight',
+                        Number(e.target.value) || 0
+                      )
+                    }
+                    className="w-16 text-2xl font-black text-gray-900 tabular-nums text-center bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <button
+                    onClick={() =>
+                      updateSetField(
+                        currentStep.exerciseIndex,
+                        currentStep.setIndex,
+                        'weight',
+                        (currentSet.weight ?? 0) + 2.5
+                      )
+                    }
+                    className="w-7 h-7 rounded-lg bg-yellow-100 text-yellow-700 flex items-center justify-center hover:bg-yellow-200 transition-colors"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                <div className="text-[10px] text-yellow-600 uppercase font-bold">kg</div>
+              </div>
+            )}
+            {/* Duration */}
+            {currentSet.duration && (
+              <div className="flex-1 bg-teal-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-black text-teal-700 tabular-nums">{currentSet.duration}</div>
+                <div className="text-[10px] text-teal-500 uppercase font-bold">Duracao</div>
+              </div>
+            )}
+            {/* Distance */}
+            {currentSet.distance !== undefined && currentSet.distance > 0 && (
+              <div className="flex-1 bg-rose-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-black text-rose-700 tabular-nums">{currentSet.distance}</div>
+                <div className="text-[10px] text-rose-500 uppercase font-bold">km</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Timers row */}
+        <div className="flex items-end justify-between mb-5">
+          <span className={`text-5xl font-black tabular-nums leading-none ${isResting ? 'text-yellow-500' : 'text-gray-900'}`}>
+            {formatTime(mainTimerValue)}
+          </span>
+          <div className="text-right">
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{formatElapsed(elapsed)}</div>
+            <div className="text-[10px] text-gray-400 uppercase font-bold">Total time</div>
+          </div>
+        </div>
+
+        {/* Thumbnail strip */}
+        <ThumbnailStrip
+          exercises={trainingExercises}
+          supersets={supersets}
+          currentExerciseIndex={currentStep.exerciseIndex}
+          completedSetIds={completedSetIds}
+        />
+
+        {/* Spacer */}
+        <div className="flex-1 min-h-2" />
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-yellow-400 rounded-full"
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            />
+          </div>
+          <span className="text-xs font-bold text-gray-400 tabular-nums">{progress}%</span>
+        </div>
+
+        {/* ===== Footer controls ===== */}
+        <div className="flex items-center justify-between">
+          {/* Prev */}
+          <button
+            onClick={handlePrev}
+            className="flex flex-col items-center gap-0.5 min-w-[64px] py-2"
+          >
+            <span className="text-sm font-bold text-gray-600">Prev</span>
+          </button>
+
+          {/* Pause / Play */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setIsRunning((r) => !r)}
+            className="w-16 h-16 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-lg"
+          >
+            {isRunning ? <Pause size={28} /> : <Play size={28} />}
+          </motion.button>
+
+          {/* Next */}
+          <button
+            onClick={handleNext}
+            className="flex flex-col items-center gap-0.5 min-w-[64px] py-2"
+          >
+            <span className="text-sm font-bold text-gray-600">
+              {isResting ? 'Skip' : 'Next'}
+            </span>
+            {!isResting && nextRestDuration > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                <Clock size={10} />
+                {nextRestDuration}s
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Rest Timer Modal */}
-      <AnimatePresence>
-        {restTimer !== null && restTimer > 0 && (
-          <RestTimerModal
-            seconds={restTimer}
-            onSkip={() => setRestTimer(null)}
-            onAddTime={(s) =>
-              setRestTimer((t) => Math.max(0, (t || 0) + s))
-            }
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Summary Modal */}
+     </div>
+      {/* ===== Summary Modal ===== */}
       <AnimatePresence>
         {showSummary && (
           <SummaryModal
-            exercises={exercises}
+            exercises={trainingExercises}
+            completedSetIds={completedSetIds}
             elapsed={elapsed}
             onClose={() => {
               setShowSummary(false);
-              if (onBack) onBack();
+              onBack();
             }}
           />
         )}

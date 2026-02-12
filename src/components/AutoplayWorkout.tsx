@@ -2,33 +2,23 @@ import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   Trash2,
   Plus,
-  MoreHorizontal,
   Copy,
-  ArrowUp,
-  ArrowDown,
   GripVertical,
   Timer,
   ArrowRight,
+  Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DURATION_PRESETS,
   makeExerciseItem,
   makeRestItem,
+  makeBlock,
 } from '../types/autoplay';
-import type { AutoplayItem } from '../types/autoplay';
+import type { AutoplayItem, AutoplayBlock } from '../types/autoplay';
 import type { LibraryExercise } from '../App';
 
 // --- Helpers ---
-
-function formatDuration(seconds: number): string {
-  if (seconds >= 60) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return s > 0 ? `${m}min ${s}s` : `${m}min`;
-  }
-  return `${seconds}s`;
-}
 
 function presetLabel(seconds: number): string {
   if (seconds >= 60) {
@@ -37,59 +27,6 @@ function presetLabel(seconds: number): string {
     return s > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${m}min`;
   }
   return `${seconds}s`;
-}
-
-// --- Dropdown Menu (same as StrictWorkout) ---
-
-type MenuAction = {
-  icon: typeof Trash2;
-  label: string;
-  color?: string;
-  danger?: boolean;
-  onClick: () => void;
-};
-
-function DropdownMenu({
-  actions,
-  onClose,
-}: {
-  actions: MenuAction[];
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-10" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: -4 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: -4 }}
-        transition={{ duration: 0.12 }}
-        className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
-      >
-        {actions.map((action, i) => (
-          <Fragment key={i}>
-            {action.danger && i > 0 && (
-              <div className="border-t border-gray-100 my-1" />
-            )}
-            <button
-              onClick={() => {
-                action.onClick();
-                onClose();
-              }}
-              className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors ${
-                action.danger
-                  ? 'text-red-500 hover:bg-red-50'
-                  : `${action.color || 'text-gray-600'} hover:bg-gray-50`
-              }`}
-            >
-              <action.icon size={16} />
-              <span className="flex-1">{action.label}</span>
-            </button>
-          </Fragment>
-        ))}
-      </motion.div>
-    </>
-  );
 }
 
 // --- Confirm Dialog (same as StrictWorkout) ---
@@ -220,6 +157,64 @@ function RestInserter({ onClick }: { onClick: () => void }) {
   );
 }
 
+// --- Repeat Chip ---
+
+function RepeatChip({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition-colors ${
+          value > 1
+            ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+            : 'bg-gray-100 text-gray-400 border border-transparent hover:bg-gray-200'
+        }`}
+      >
+        {value}x
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 z-20 p-2 flex gap-1"
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => {
+                    onChange(n);
+                    setOpen(false);
+                  }}
+                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                    value === n
+                      ? 'bg-yellow-400 text-gray-900'
+                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {n}x
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // --- Exercise Card ---
 
 function ExerciseCard({
@@ -268,6 +263,17 @@ function ExerciseCard({
 
         {/* Form fields */}
         <div className="flex-1 flex flex-col gap-y-3 min-w-0">
+          {/* Repeat */}
+          <div className="flex flex-col gap-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">
+              Repetir
+            </label>
+            <RepeatChip
+              value={item.repeat ?? 1}
+              onChange={(v) => onUpdate({ repeat: v })}
+            />
+          </div>
+
           {/* Duration */}
           <div className="flex flex-col gap-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase">
@@ -347,7 +353,26 @@ function ExerciseCard({
   );
 }
 
-// --- Rest Card (compact) ---
+// --- Rest Presets (shared style with StrictWorkout) ---
+
+const REST_PRESETS: { label: string; value: number }[] = [
+  { label: 'OFF', value: 0 },
+  { label: '10s', value: 10 },
+  { label: '30s', value: 30 },
+  { label: '60s', value: 60 },
+  { label: '90s', value: 90 },
+  { label: '2min', value: 120 },
+  { label: '3min', value: 180 },
+];
+const REST_PRESET_VALUES = new Set(REST_PRESETS.map((p) => p.value));
+
+function formatRestLabel(seconds: number): string {
+  if (seconds === 0) return 'OFF';
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60}min`;
+  return `${seconds}s`;
+}
+
+// --- Rest Card ---
 
 function RestCard({
   item,
@@ -366,70 +391,89 @@ function RestCard({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const menuActions: MenuAction[] = [];
-  if (index > 0)
-    menuActions.push({ icon: ArrowUp, label: 'Mover para cima', onClick: onMoveUp });
-  if (index < total - 1)
-    menuActions.push({ icon: ArrowDown, label: 'Mover para baixo', onClick: onMoveDown });
-  menuActions.push({ icon: Trash2, label: 'Remover', danger: true, onClick: onRemove });
+  const value = item.duration;
+  const isPreset = REST_PRESET_VALUES.has(value);
+  const [editingCustom, setEditingCustom] = useState(false);
 
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-visible">
-      <div className="flex flex-col gap-2 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-200/60 flex-shrink-0">
-            <Timer size={16} className="text-gray-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-xs font-bold text-gray-500 uppercase">Descanso</span>
-              <span className="text-xs font-bold text-gray-400">{formatDuration(item.duration)}</span>
-            </div>
-            <input
-              type="text"
-              value={item.label}
-              onChange={(e) => onUpdate({ label: e.target.value })}
-              placeholder="Descanso ativo, alongamento..."
-              className="w-full text-xs text-gray-500 bg-transparent border-none outline-none placeholder-gray-300"
-            />
-          </div>
-
-          <div className="relative flex-shrink-0">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-1.5 text-gray-300 hover:text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            <AnimatePresence>
-              {isMenuOpen && (
-                <DropdownMenu
-                  actions={menuActions}
-                  onClose={() => setIsMenuOpen(false)}
-                />
-              )}
-            </AnimatePresence>
-          </div>
+    <div className="flex flex-col gap-2 py-3 px-4 rounded-xl bg-gray-50 border border-gray-200 my-1">
+      {/* Main row */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Timer size={16} className="text-gray-400" />
+          <span className="text-sm font-bold text-gray-600">Descanso</span>
         </div>
-
-        {/* Duration quick buttons */}
-        <div className="flex items-center gap-1 flex-wrap pl-11">
-          {[10, 15, 20, 30, 60].map((d) => (
+        <div className="flex items-center gap-1.5 flex-1 overflow-x-auto hide-scrollbar">
+          {REST_PRESETS.map((p) => (
             <button
-              key={d}
-              onClick={() => onUpdate({ duration: d })}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition-colors ${
-                item.duration === d
-                  ? 'bg-gray-300 text-gray-700'
-                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+              key={p.value}
+              onClick={() => { onUpdate({ duration: p.value }); setEditingCustom(false); }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                !editingCustom && value === p.value
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
               }`}
             >
-              {presetLabel(d)}
+              {p.label}
             </button>
           ))}
+          {editingCustom ? (
+            <div className="relative flex-shrink-0">
+              <input
+                autoFocus
+                type="number"
+                min={0}
+                value={value || ''}
+                onChange={(e) => onUpdate({ duration: Number(e.target.value) || 0 })}
+                onBlur={() => { if (!value) { onUpdate({ duration: 0 }); setEditingCustom(false); } }}
+                placeholder="45"
+                className="w-20 px-2 py-1 pr-7 rounded-lg text-xs font-medium border border-yellow-400 text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">seg</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingCustom(true)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                !isPreset && value > 0
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              {!isPreset && value > 0 ? formatRestLabel(value) : 'Outro'}
+            </button>
+          )}
         </div>
+        <RepeatChip
+          value={item.repeat ?? 1}
+          onChange={(v) => onUpdate({ repeat: v })}
+        />
+        <button
+          onClick={onRemove}
+          className="p-1.5 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+          title="Remover descanso"
+        >
+          <Trash2 size={14} />
+        </button>
+        <button
+          onClick={() => {
+            if (index > 0) onMoveUp();
+            else if (index < total - 1) onMoveDown();
+          }}
+          className="flex items-center justify-center p-1 text-gray-300 cursor-grab hover:text-gray-500 transition-colors flex-shrink-0 touch-none"
+        >
+          <GripVertical size={16} />
+        </button>
+      </div>
+      {/* Notes row */}
+      <div className="pl-7">
+        <input
+          type="text"
+          value={item.label}
+          onChange={(e) => onUpdate({ label: e.target.value })}
+          placeholder="Descanso ativo, alongamento..."
+          className="w-full text-xs text-gray-500 bg-transparent border-none outline-none placeholder-gray-300"
+        />
       </div>
     </div>
   );
@@ -462,11 +506,15 @@ function EmptyState() {
 export function AutoplayWorkout({
   items,
   setItems,
+  blocks,
+  setBlocks,
   onRegisterAdd,
   onRegisterAddRest,
 }: {
   items: AutoplayItem[];
   setItems: React.Dispatch<React.SetStateAction<AutoplayItem[]>>;
+  blocks: AutoplayBlock[];
+  setBlocks: React.Dispatch<React.SetStateAction<AutoplayBlock[]>>;
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
   onRegisterAddRest?: (fn: () => void) => void;
 }) {
@@ -538,63 +586,184 @@ export function AutoplayWorkout({
     });
   };
 
+  // --- Block helpers ---
+  const createBlockFromRange = (startIdx: number, endIdx: number) => {
+    const block = makeBlock();
+    setBlocks((prev) => [...prev, block]);
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i >= startIdx && i <= endIdx ? { ...it, blockId: block.id } : it
+      )
+    );
+  };
+
+  const ungroupBlock = (blockId: string) => {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.blockId === blockId ? { ...it, blockId: undefined } : it
+      )
+    );
+    setBlocks((prev) => prev.filter((b) => b.id !== blockId));
+  };
+
+  const updateBlock = (blockId: string, updates: Partial<AutoplayBlock>) => {
+    setBlocks((prev) =>
+      prev.map((b) => (b.id === blockId ? { ...b, ...updates } : b))
+    );
+  };
+
+  // Group items into segments: { blockId | null, items with indices }
+  type Segment =
+    | { type: 'block'; block: AutoplayBlock; entries: { item: AutoplayItem; index: number }[] }
+    | { type: 'loose'; entries: { item: AutoplayItem; index: number }[] };
+
+  const segments: Segment[] = [];
+  items.forEach((item, index) => {
+    const bid = item.blockId;
+    if (bid) {
+      const block = blocks.find((b) => b.id === bid);
+      if (block) {
+        const last = segments[segments.length - 1];
+        if (last && last.type === 'block' && last.block.id === bid) {
+          last.entries.push({ item, index });
+        } else {
+          segments.push({ type: 'block', block, entries: [{ item, index }] });
+        }
+        return;
+      }
+    }
+    const last = segments[segments.length - 1];
+    if (last && last.type === 'loose') {
+      last.entries.push({ item, index });
+    } else {
+      segments.push({ type: 'loose', entries: [{ item, index }] });
+    }
+  });
+
   if (items.length === 0) {
     return <EmptyState />;
   }
 
+  const renderItemCard = (item: AutoplayItem, index: number) => (
+    <Fragment key={item.id}>
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+        transition={{ duration: 0.2 }}
+        className={index > 0 && item.type === 'exercise' && items[index - 1]?.type !== 'rest' ? 'mt-4' : 'mt-2'}
+      >
+        {item.type === 'exercise' ? (
+          <ExerciseCard
+            item={item}
+            index={index}
+            total={items.length}
+            onUpdate={(updates) => updateItem(item.id, updates)}
+            onRemove={() =>
+              setConfirmAction({
+                message: `Remover "${item.name}" do treino?`,
+                onConfirm: () => {
+                  removeItem(index);
+                  setConfirmAction(null);
+                },
+              })
+            }
+            onDuplicate={() => duplicateItem(index)}
+            onMoveUp={() => moveItem(index, -1)}
+            onMoveDown={() => moveItem(index, 1)}
+          />
+        ) : (
+          <RestCard
+            item={item}
+            index={index}
+            total={items.length}
+            onUpdate={(updates) => updateItem(item.id, updates)}
+            onRemove={() => removeItem(index)}
+            onMoveUp={() => moveItem(index, -1)}
+            onMoveDown={() => moveItem(index, 1)}
+          />
+        )}
+      </motion.div>
+
+      {/* Rest inserter between items */}
+      {item.type === 'exercise' &&
+        index < items.length - 1 &&
+        items[index + 1]?.type === 'exercise' && (
+          <RestInserter onClick={() => insertRestAfter(index)} />
+        )}
+    </Fragment>
+  );
+
   return (
     <div className="pb-12">
       <AnimatePresence mode="popLayout">
-        {items.map((item, index) => (
-          <Fragment key={item.id}>
-            <motion.div
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className={index > 0 && item.type === 'exercise' && items[index - 1]?.type !== 'rest' ? 'mt-4' : 'mt-2'}
-            >
-              {item.type === 'exercise' ? (
-                <ExerciseCard
-                  item={item}
-                  index={index}
-                  total={items.length}
-                  onUpdate={(updates) => updateItem(item.id, updates)}
-                  onRemove={() =>
-                    setConfirmAction({
-                      message: `Remover "${item.name}" do treino?`,
-                      onConfirm: () => {
-                        removeItem(index);
-                        setConfirmAction(null);
-                      },
-                    })
-                  }
-                  onDuplicate={() => duplicateItem(index)}
-                  onMoveUp={() => moveItem(index, -1)}
-                  onMoveDown={() => moveItem(index, 1)}
-                />
-              ) : (
-                <RestCard
-                  item={item}
-                  index={index}
-                  total={items.length}
-                  onUpdate={(updates) => updateItem(item.id, updates)}
-                  onRemove={() => removeItem(index)}
-                  onMoveUp={() => moveItem(index, -1)}
-                  onMoveDown={() => moveItem(index, 1)}
-                />
-              )}
-            </motion.div>
+        {segments.map((seg, segIdx) => {
+          if (seg.type === 'block') {
+            return (
+              <div
+                key={seg.block.id}
+                className="mt-4 border-l-[3px] border-yellow-400 bg-yellow-50/30 rounded-r-xl pl-3 pr-1 py-2"
+              >
+                {/* Block header */}
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <input
+                    value={seg.block.name}
+                    onChange={(e) => updateBlock(seg.block.id, { name: e.target.value })}
+                    className="text-xs font-bold text-gray-700 bg-transparent border-none outline-none flex-1 min-w-0"
+                  />
+                  {/* Rounds selector */}
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => updateBlock(seg.block.id, { rounds: n })}
+                        className={`w-6 h-6 rounded text-[10px] font-bold transition-colors ${
+                          seg.block.rounds === n
+                            ? 'bg-yellow-400 text-gray-900'
+                            : 'bg-white text-gray-400 hover:bg-gray-100'
+                        }`}
+                      >
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => ungroupBlock(seg.block.id)}
+                    className="text-[10px] text-gray-400 hover:text-red-500 font-medium px-2 py-1 rounded hover:bg-white transition-colors"
+                  >
+                    Desagrupar
+                  </button>
+                </div>
+                {/* Block items */}
+                {seg.entries.map(({ item, index }) => renderItemCard(item, index))}
+              </div>
+            );
+          }
 
-            {/* Rest inserter between items (only show between exercises or after exercise before next exercise) */}
-            {item.type === 'exercise' &&
-              index < items.length - 1 &&
-              items[index + 1]?.type === 'exercise' && (
-                <RestInserter onClick={() => insertRestAfter(index)} />
+          // Loose segment
+          return (
+            <Fragment key={`loose-${segIdx}`}>
+              {seg.entries.map(({ item, index }) => renderItemCard(item, index))}
+              {/* Create block button for loose segments with 2+ items */}
+              {seg.entries.length >= 2 && (
+                <div className="flex items-center justify-center py-2">
+                  <button
+                    onClick={() => {
+                      const first = seg.entries[0].index;
+                      const last = seg.entries[seg.entries.length - 1].index;
+                      createBlockFromRange(first, last);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white border border-dashed border-gray-200 rounded-full hover:border-yellow-400 hover:text-yellow-600 transition-all"
+                  >
+                    <Layers size={12} />
+                    Agrupar em bloco
+                  </button>
+                </div>
               )}
-          </Fragment>
-        ))}
+            </Fragment>
+          );
+        })}
       </AnimatePresence>
 
       {/* JSON Preview */}
@@ -604,7 +773,7 @@ export function AutoplayWorkout({
             JSON do treino
           </h3>
           <pre className="bg-gray-950 text-gray-300 text-xs rounded-xl p-4 overflow-x-auto max-h-96 overflow-y-auto">
-            <code>{JSON.stringify(items, null, 2)}</code>
+            <code>{JSON.stringify({ items, blocks }, null, 2)}</code>
           </pre>
         </div>
       )}

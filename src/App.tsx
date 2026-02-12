@@ -1,16 +1,15 @@
 import { useRef, useState, useEffect } from 'react';
-import { Menu, Dumbbell, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
-import { ExerciseLibrary, ExerciseListContent } from './components/ExerciseLibrary';
+import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { WorkoutEditor } from './components/WorkoutEditor';
 import { AerobicEditor } from './components/AerobicEditor';
 import { AerobicSummary } from './components/AerobicSummary';
-import { AutoplayEditor } from './components/AutoplayEditor';
-import { AutoplaySummaryContent } from './components/AutoplaySummary';
+import { StrictTrainingPage } from './components/StrictTrainingPage';
+import { AerobicExecutionPage } from './components/AerobicExecutionPage';
 import { DEFAULT_BLOCKS } from './types/aerobic';
 import type { AerobicWorkout } from './types/aerobic';
-import type { AutoplayItem } from './types/autoplay';
+import type { StrictExercise } from './types/workout';
 
 export type LibraryExercise = {
   name: string;
@@ -48,14 +47,12 @@ export function App() {
   const addExerciseFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Autoplay items state (so summary sidebar can read it)
-  const [autoplayItems, setAutoplayItems] = useState<AutoplayItem[]>([]);
-  const [autoplaySidebarTab, setAutoplaySidebarTab] = useState<'summary' | 'library'>('summary');
-  const [autoplayMobileLibOpen, setAutoplayMobileLibOpen] = useState(false);
+  // Autoplay add function ref (reuses strict interface with duration)
+  const autoplayAddFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
 
-  // Shared aerobic workout state (so summary sidebar can read it)
+  // Shared aerobic workout state
   const [aerobicWorkout, setAerobicWorkout] = useState<AerobicWorkout>({
-    workoutName: 'Novo Treino Aeróbico',
+    workoutName: 'Novo Treino Aerobico',
     workoutStartDate: '',
     workoutEndDate: '',
     workoutDescription: '',
@@ -63,115 +60,117 @@ export function App() {
     blocks: DEFAULT_BLOCKS,
   });
 
+  // --- Execution state ---
+  const [strictExecuting, setStrictExecuting] = useState(false);
+  const [strictExercises, setStrictExercises] = useState<StrictExercise[]>([]);
+  const [autoplayExecuting, setAutoplayExecuting] = useState(false);
+  const [autoplayExercises, setAutoplayExercises] = useState<StrictExercise[]>([]);
+  const [aerobicExecuting, setAerobicExecuting] = useState(false);
+  const isAnyExecuting = strictExecuting || autoplayExecuting || aerobicExecuting;
+
+  // --- Execution handlers ---
+  const handleStartStrict = (exercises: StrictExercise[]) => {
+    setStrictExercises(exercises);
+    setStrictExecuting(true);
+  };
+
+  const handleStartAutoplay = (exercises: StrictExercise[]) => {
+    setAutoplayExercises(exercises);
+    setAutoplayExecuting(true);
+  };
+
+  const handleStartAerobic = () => {
+    setAerobicExecuting(true);
+  };
+
   return (
     <div className="min-h-screen bg-white flex overflow-x-hidden">
-      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      {/* Mobile hamburger button */}
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="fixed top-4 left-4 z-30 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm text-gray-600 md:hidden"
-      >
-        <Menu size={20} />
-      </button>
-
-      <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
-        {page === 'strict' && (
-          <WorkoutEditor
-            onRegisterAdd={(fn) => {
-              addExerciseFnRef.current = fn;
-            }}
-          />
-        )}
-        {page === 'aerobico' && (
-          <AerobicEditor workout={aerobicWorkout} setWorkout={setAerobicWorkout} />
-        )}
-        {page === 'autoplay' && (
-          <AutoplayEditor
-            items={autoplayItems}
-            setItems={setAutoplayItems}
-            onRegisterAdd={(fn) => {
-              addExerciseFnRef.current = fn;
-            }}
-          />
-        )}
-      </main>
-
-      {/* Right sidebar changes per page */}
-      {page === 'strict' && (
-        <ExerciseLibrary
-          onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
-        />
+      {/* Sidebar: hidden on mobile during execution */}
+      {!isAnyExecuting && (
+        <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
-      {page === 'autoplay' && (
+      {isAnyExecuting && (
+        <div className="hidden md:block">
+          <Sidebar mobileOpen={false} onClose={() => {}} />
+        </div>
+      )}
+
+      {/* Mobile hamburger button - hidden during execution */}
+      {!isAnyExecuting && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-30 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm text-gray-600 md:hidden"
+        >
+          <Menu size={20} />
+        </button>
+      )}
+
+      {/* Main content */}
+      {isAnyExecuting ? (
+        <main className="flex-1 min-w-0 ml-0 md:ml-16 transition-all duration-300">
+          {strictExecuting && (
+            <StrictTrainingPage
+              sourceExercises={strictExercises}
+              onBack={() => setStrictExecuting(false)}
+            />
+          )}
+          {autoplayExecuting && (
+            <StrictTrainingPage
+              sourceExercises={autoplayExercises}
+              onBack={() => setAutoplayExecuting(false)}
+            />
+          )}
+          {aerobicExecuting && (
+            <AerobicExecutionPage
+              workout={aerobicWorkout}
+              onBack={() => setAerobicExecuting(false)}
+              onFinish={() => setAerobicExecuting(false)}
+            />
+          )}
+        </main>
+      ) : (
         <>
-          {/* Desktop: tabbed sidebar with Summary + Library */}
-          <div className="w-80 h-screen bg-white border-l border-gray-200 flex-col fixed right-0 top-0 z-20 hidden xl:flex">
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => setAutoplaySidebarTab('summary')}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-colors ${
-                  autoplaySidebarTab === 'summary'
-                    ? 'text-yellow-600 border-b-2 border-yellow-400'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                Resumo
-              </button>
-              <button
-                onClick={() => setAutoplaySidebarTab('library')}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-colors ${
-                  autoplaySidebarTab === 'library'
-                    ? 'text-yellow-600 border-b-2 border-yellow-400'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                Biblioteca
-              </button>
-            </div>
-            {autoplaySidebarTab === 'summary' ? (
-              <AutoplaySummaryContent items={autoplayItems} />
-            ) : (
-              <ExerciseListContent onAddExercise={(ex) => addExerciseFnRef.current?.(ex)} />
+          <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
+            {page === 'strict' && (
+              <WorkoutEditor
+                onRegisterAdd={(fn) => {
+                  addExerciseFnRef.current = fn;
+                }}
+                onStartTraining={handleStartStrict}
+              />
             )}
-          </div>
-
-          {/* Mobile FAB for library */}
-          <button
-            onClick={() => setAutoplayMobileLibOpen(true)}
-            className="fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-yellow-400 text-gray-900 shadow-lg flex items-center justify-center hover:bg-yellow-500 transition-colors xl:hidden"
-          >
-            <Dumbbell size={24} />
-          </button>
-
-          {/* Mobile fullscreen library modal */}
-          <AnimatePresence>
-            {autoplayMobileLibOpen && (
-              <motion.div
-                initial={{ y: '100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="fixed inset-0 z-50 bg-white flex flex-col xl:hidden"
-              >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                  <h2 className="font-bold text-sm text-gray-900 uppercase tracking-wide">Exercícios</h2>
-                  <button
-                    onClick={() => setAutoplayMobileLibOpen(false)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  <ExerciseListContent onAddExercise={(ex) => addExerciseFnRef.current?.(ex)} />
-                </div>
-              </motion.div>
+            {page === 'aerobico' && (
+              <AerobicEditor
+                workout={aerobicWorkout}
+                setWorkout={setAerobicWorkout}
+                onStartTraining={handleStartAerobic}
+              />
             )}
-          </AnimatePresence>
+            {page === 'autoplay' && (
+              <WorkoutEditor
+                onRegisterAdd={(fn) => {
+                  autoplayAddFnRef.current = fn;
+                }}
+                onStartTraining={handleStartAutoplay}
+                defaultExerciseType="duration"
+              />
+            )}
+          </main>
+
+          {/* Right sidebar changes per page */}
+          {page === 'strict' && (
+            <ExerciseLibrary
+              onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
+            />
+          )}
+          {page === 'autoplay' && (
+            <ExerciseLibrary
+              onAddExercise={(ex) => autoplayAddFnRef.current?.(ex)}
+            />
+          )}
+          {page === 'aerobico' && <AerobicSummary workout={aerobicWorkout} />}
         </>
       )}
-      {page === 'aerobico' && <AerobicSummary workout={aerobicWorkout} />}
     </div>
   );
 }
