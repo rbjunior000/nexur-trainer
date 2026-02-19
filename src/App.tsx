@@ -6,6 +6,7 @@ import { WorkoutEditor } from './components/WorkoutEditor';
 import { AerobicEditor } from './components/AerobicEditor';
 import { AerobicSummary } from './components/AerobicSummary';
 import { StrictTrainingPage } from './components/StrictTrainingPage';
+import { StrictTrainingPageV2 } from './components/StrictTrainingPageV2';
 import { AerobicExecutionPage } from './components/AerobicExecutionPage';
 import { DEFAULT_BLOCKS } from './types/aerobic';
 import type { AerobicWorkout } from './types/aerobic';
@@ -89,7 +90,7 @@ export function App() {
       {!isAnyExecuting && (
         <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
-      {isAnyExecuting && (
+      {isAnyExecuting && strictExecuting ? null : isAnyExecuting && (
         <div className="hidden md:block">
           <Sidebar mobileOpen={false} onClose={() => {}} />
         </div>
@@ -107,9 +108,9 @@ export function App() {
 
       {/* Main content */}
       {isAnyExecuting ? (
-        <main className="flex-1 min-w-0 ml-0 md:ml-16 transition-all duration-300">
+        <main className="flex-1 min-w-0 ml-0 md:ml-0 transition-all duration-300">
           {strictExecuting && (
-            <StrictTrainingPage
+            <StrictTrainingPageV2
               sourceExercises={strictExercises}
               onBack={() => setStrictExecuting(false)}
             />

@@ -72,7 +72,10 @@ const TYPE_CONFIG: Record<string, ExerciseTypeConfig & { hasReps?: boolean }> = 
     color: 'teal',
     bgColor: 'bg-teal-100',
     textColor: 'text-teal-700',
-    columns: [{ key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00:00' }],
+    columns: [
+      { key: 'weight', label: 'Carga', type: 'number', placeholder: '0', suffix: 'kg' },
+      { key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00:00' },
+    ],
   },
   distance: {
     label: 'Distância',
@@ -252,9 +255,9 @@ export function StrictWorkout({
       supersetWithNext: false,
       sets: isDuration
         ? [
-            { id: uid(), duration: '00:00:30', rest: 60 },
-            { id: uid(), duration: '00:00:30', rest: 60 },
-            { id: uid(), duration: '00:00:30', rest: 60 },
+            { id: uid(), weight: 0, duration: '00:00:30', rest: 60 },
+            { id: uid(), weight: 0, duration: '00:00:30', rest: 60 },
+            { id: uid(), weight: 0, duration: '00:00:30', rest: 60 },
           ]
         : [
             { id: uid(), reps: 12, weight: 0, rest: 60 },
@@ -681,6 +684,7 @@ function ExerciseCard({
   onDuplicate,
   onToggleSuperset,
   onUnlinkSuperset,
+  onAddRestAfter,
   isLast,
   canSuperset,
   isPartOfSuperset,
@@ -693,6 +697,7 @@ function ExerciseCard({
   onDuplicate: () => void;
   onToggleSuperset: () => void;
   onUnlinkSuperset: () => void;
+  onAddRestAfter: () => void;
   isLast: boolean;
   canSuperset: boolean;
   isPartOfSuperset: boolean;
@@ -1097,6 +1102,13 @@ function ExerciseCard({
                     >
                       <Copy size={15} className="text-gray-400" />
                       Duplicar exercício
+                    </button>
+                    <button
+                      onClick={() => { onAddRestAfter(); setIsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
+                    >
+                      <Timer size={15} className="text-gray-400" />
+                      Adicionar descanso
                     </button>
                     <button
                       onClick={() => { onRemove(); setIsMenuOpen(false); }}
