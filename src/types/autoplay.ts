@@ -10,6 +10,7 @@ export interface AutoplayItem {
   label: string;    // texto livre
   repeat?: number;  // default 1 — quantas vezes o item roda seguidas
   blockId?: string; // referencia ao bloco (opcional)
+  color?: string;
 }
 
 export interface AutoplayBlock {

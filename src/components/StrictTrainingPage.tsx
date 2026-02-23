@@ -13,6 +13,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { StrictExercise } from '../types/workout';
 import { formatTime, formatElapsed } from '../utils/formatTime';
 
+// --- Helper ---
+function parseDurationToSeconds(duration: string): number {
+  const parts = duration.split(':').map(Number);
+  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+  return parts[0] || 0;
+}
+
 // --- Internal types ---
 interface TrainingSet {
   id: string;
@@ -30,6 +38,7 @@ interface TrainingExercise {
   thumbnail: string;
   category: string;
   equipment: string;
+  type: string;
   typeLabel: string;
   typeColor: string;
   typeBg: string;
@@ -38,6 +47,7 @@ interface TrainingExercise {
   supersetId?: string;
   isRest?: boolean;
   restDuration?: number;
+  color?: string;
 }
 
 interface SupersetGroup {
@@ -71,6 +81,7 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
       thumbnail: '',
       category: '',
       equipment: '',
+      type: 'rest',
       typeLabel: 'Rest',
       typeColor: 'text-gray-500',
       typeBg: 'bg-gray-100',
@@ -87,11 +98,13 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     thumbnail: ex.thumbnail,
     category: ex.category,
     equipment: ex.equipment,
+    type: ex.type,
     typeLabel: typeInfo.label,
     typeColor: typeInfo.color,
     typeBg: typeInfo.bg,
     notes: ex.notes,
     supersetId,
+    color: ex.color,
     sets: ex.sets.map((s) => ({
       id: s.id,
       reps: s.reps,
@@ -447,17 +460,20 @@ export function StrictTrainingPage({
   const [isRunning, setIsRunning] = useState(true);
   const [restCountdown, setRestCountdown] = useState<number | null>(null);
   const [restInitial, setRestInitial] = useState(0);
+  const [durationCountdown, setDurationCountdown] = useState<number | null>(null);
+  const [durationInitial, setDurationInitial] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
 
   const isResting = restCountdown !== null && restCountdown > 0;
-
-  // Refs for stable callbacks
-  const stateRef = useRef({ currentStepIdx, focusSteps });
-  stateRef.current = { currentStepIdx, focusSteps };
+  const isDurationRunning = durationCountdown !== null && durationCountdown > 0;
 
   const currentStep = focusSteps[currentStepIdx];
   const currentExercise = currentStep ? trainingExercises[currentStep.exerciseIndex] : null;
   const currentSet = currentExercise?.sets[currentStep?.setIndex ?? 0] ?? null;
+
+  // Refs for stable callbacks
+  const stateRef = useRef({ currentStepIdx, focusSteps, currentSet, currentStep });
+  stateRef.current = { currentStepIdx, focusSteps, currentSet, currentStep };
 
   // --- Timers ---
   // Elapsed total time
@@ -473,10 +489,10 @@ export function StrictTrainingPage({
   }, [currentStepIdx]);
 
   useEffect(() => {
-    if (!isRunning || isResting) return;
+    if (!isRunning || isResting || isDurationRunning) return;
     const id = setInterval(() => setStepTimer((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, [isRunning, isResting]);
+  }, [isRunning, isResting, isDurationRunning]);
 
   // Rest countdown
   useEffect(() => {
@@ -487,10 +503,20 @@ export function StrictTrainingPage({
     return () => clearInterval(id);
   }, [isRunning, restCountdown]);
 
+  // Duration countdown
+  useEffect(() => {
+    if (!isRunning || durationCountdown === null || durationCountdown <= 0) return;
+    const id = setInterval(() => {
+      setDurationCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, durationCountdown]);
+
   // Advance to next step
   const advanceStep = useCallback(() => {
     const { currentStepIdx: idx, focusSteps: steps } = stateRef.current;
     setRestCountdown(null);
+    setDurationCountdown(null);
     if (idx >= steps.length - 1) {
       setIsRunning(false);
       setShowSummary(true);
@@ -515,6 +541,26 @@ export function StrictTrainingPage({
     }
   }, [restCountdown, advanceStep]);
 
+  // Auto-complete set when duration countdown reaches 0
+  useEffect(() => {
+    if (durationCountdown !== 0) return;
+    setDurationCountdown(null);
+    const { currentSet: cs, currentStep: cstep } = stateRef.current;
+    if (!cs || !cstep) return;
+    setCompletedSetIds((prev) => {
+      const next = new Set(prev);
+      next.add(cs.id);
+      return next;
+    });
+    const rest = cstep.restAfterStep;
+    if (rest > 0 && stateRef.current.currentStepIdx < stateRef.current.focusSteps.length - 1) {
+      setRestCountdown(rest);
+      setRestInitial(rest);
+    } else {
+      advanceStep();
+    }
+  }, [durationCountdown, advanceStep]);
+
   // --- Handlers ---
   const handleNext = useCallback(() => {
     if (isResting) {
@@ -522,7 +568,38 @@ export function StrictTrainingPage({
       advanceStep();
       return;
     }
+
+    if (isDurationRunning) {
+      // Skip duration countdown → complete set immediately
+      setDurationCountdown(null);
+      const { currentSet: cs, currentStep: cstep } = stateRef.current;
+      if (!cs || !cstep) return;
+      setCompletedSetIds((prev) => {
+        const next = new Set(prev);
+        next.add(cs.id);
+        return next;
+      });
+      const rest = cstep.restAfterStep;
+      if (rest > 0 && stateRef.current.currentStepIdx < stateRef.current.focusSteps.length - 1) {
+        setRestCountdown(rest);
+        setRestInitial(rest);
+      } else {
+        advanceStep();
+      }
+      return;
+    }
+
     if (!currentSet || !currentStep) return;
+
+    // Duration exercise: start countdown instead of completing immediately
+    if (currentExercise?.type === 'duration' && currentSet.duration) {
+      const secs = parseDurationToSeconds(currentSet.duration);
+      if (secs > 0) {
+        setDurationCountdown(secs);
+        setDurationInitial(secs);
+        return;
+      }
+    }
 
     // Mark set completed
     setCompletedSetIds((prev) => {
@@ -539,9 +616,13 @@ export function StrictTrainingPage({
     } else {
       advanceStep();
     }
-  }, [isResting, currentSet, currentStep, advanceStep]);
+  }, [isResting, isDurationRunning, currentSet, currentStep, currentExercise, advanceStep]);
 
   const handlePrev = useCallback(() => {
+    if (isDurationRunning) {
+      setDurationCountdown(null);
+      return;
+    }
     if (isResting) {
       setRestCountdown(null);
       return;
@@ -549,7 +630,7 @@ export function StrictTrainingPage({
     if (currentStepIdx > 0) {
       setCurrentStepIdx((prev) => prev - 1);
     }
-  }, [isResting, currentStepIdx]);
+  }, [isDurationRunning, isResting, currentStepIdx]);
 
 
   // --- Derived values ---
@@ -561,10 +642,12 @@ export function StrictTrainingPage({
     ? Math.round((completedSetIds.size / totalActionSteps) * 100)
     : 0;
 
-  const nextRestDuration = !isResting ? (currentStep?.restAfterStep ?? 0) : 0;
+  const nextRestDuration = !isResting && !isDurationRunning ? (currentStep?.restAfterStep ?? 0) : 0;
 
   // Rest progress for the visual ring
   const restProgress = isResting && restInitial > 0 ? (restCountdown ?? 0) / restInitial : 0;
+  // Duration progress for the visual ring
+  const durationProgress = isDurationRunning && durationInitial > 0 ? (durationCountdown ?? 0) / durationInitial : 0;
 
   // For rest steps, find the next exercise to show its info
   const displayExercise = isOnRestStep
@@ -588,7 +671,7 @@ export function StrictTrainingPage({
   const setLabel = isOnRestStep
     ? 'Descanso'
     : `Serie ${currentStep.setIndex + 1} de ${currentExercise!.sets.length}`;
-  const mainTimerValue = isResting ? (restCountdown ?? 0) : stepTimer;
+  const mainTimerValue = isResting ? (restCountdown ?? 0) : isDurationRunning ? (durationCountdown ?? 0) : stepTimer;
 
   return (
     <div className="min-h-screen flex items-start justify-center bg-black">
@@ -620,6 +703,14 @@ export function StrictTrainingPage({
 
         {/* Top gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/10 pointer-events-none" />
+
+        {/* Color bar — left edge of hero */}
+        {displayExercise?.color && !isResting && !isOnRestStep && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-[10px] z-20"
+            style={{ background: displayExercise.color }}
+          />
+        )}
 
         {/* Back button */}
         <button
@@ -658,6 +749,40 @@ export function StrictTrainingPage({
                   </div>
                 </div>
                 <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Descanso</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Duration countdown overlay */}
+        <AnimatePresence>
+          {isDurationRunning && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center z-10"
+            >
+              <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-8 py-4 flex flex-col items-center gap-2">
+                {/* Duration ring */}
+                <div className="relative w-24 h-24">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
+                    <circle
+                      cx="48" cy="48" r="42" fill="none"
+                      stroke="#14b8a6" strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 42}
+                      strokeDashoffset={2 * Math.PI * 42 * (1 - durationProgress)}
+                      className="transition-all duration-1000 ease-linear"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-black text-white tabular-nums">
+                      {formatTime(durationCountdown ?? 0)}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Executando</span>
               </div>
             </motion.div>
           )}
@@ -770,9 +895,18 @@ export function StrictTrainingPage({
             )}
             {/* Duration */}
             {currentSet.duration && (
-              <div className="flex-1 bg-teal-50 rounded-xl p-3 text-center">
-                <div className="text-2xl font-black text-teal-700 tabular-nums">{currentSet.duration}</div>
-                <div className="text-[10px] text-teal-500 uppercase font-bold">Duracao</div>
+              <div className={`flex-1 rounded-xl p-3 text-center transition-colors ${isDurationRunning ? 'bg-teal-500' : 'bg-teal-50'}`}>
+                {isDurationRunning ? (
+                  <>
+                    <div className="text-2xl font-black text-white tabular-nums">{formatTime(durationCountdown ?? 0)}</div>
+                    <div className="text-[10px] text-teal-100 uppercase font-bold">Restante</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-black text-teal-700 tabular-nums">{currentSet.duration}</div>
+                    <div className="text-[10px] text-teal-500 uppercase font-bold">Duracao</div>
+                  </>
+                )}
               </div>
             )}
             {/* Distance */}
@@ -787,7 +921,7 @@ export function StrictTrainingPage({
 
         {/* Timers row */}
         <div className="flex items-end justify-between mb-5">
-          <span className={`text-5xl font-black tabular-nums leading-none ${isResting ? 'text-yellow-500' : 'text-gray-900'}`}>
+          <span className={`text-5xl font-black tabular-nums leading-none ${isResting ? 'text-yellow-500' : isDurationRunning ? 'text-teal-500' : 'text-gray-900'}`}>
             {formatTime(mainTimerValue)}
           </span>
           <div className="text-right">
@@ -844,9 +978,9 @@ export function StrictTrainingPage({
             className="flex flex-col items-center gap-0.5 min-w-[64px] py-2"
           >
             <span className="text-sm font-bold text-gray-600">
-              {isResting ? 'Skip' : 'Next'}
+              {isResting || isDurationRunning ? 'Skip' : 'Next'}
             </span>
-            {!isResting && nextRestDuration > 0 && (
+            {!isResting && !isDurationRunning && nextRestDuration > 0 && (
               <span className="flex items-center gap-1 text-[11px] text-gray-400">
                 <Clock size={10} />
                 {nextRestDuration}s

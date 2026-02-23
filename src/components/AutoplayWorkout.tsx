@@ -215,6 +215,80 @@ function RepeatChip({
   );
 }
 
+// --- Color Picker ---
+const COLOR_PALETTE = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#1f2937',
+  '#fca5a5', '#fdba74', '#fde047', '#86efac', '#5eead4',
+  '#93c5fd', '#c4b5fd', '#f9a8d4', '#e5e7eb', '#ffffff',
+];
+
+function ColorBar({
+  color,
+  onChange,
+  className = '',
+}: {
+  color?: string;
+  onChange: (color: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={`relative flex-shrink-0 ${className}`}>
+      <div
+        className="cursor-pointer rounded-lg w-[10px] h-full hover:w-4 duration-100"
+        style={{ background: color || '#e5e7eb' }}
+        onClick={() => setOpen(!open)}
+      />
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="absolute left-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 z-20 p-3 w-44"
+            >
+              <div className="grid grid-cols-5 gap-1.5 mb-2">
+                {COLOR_PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => { onChange(c); setOpen(false); }}
+                    className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                    style={{
+                      background: c,
+                      borderColor: color === c ? '#374151' : 'transparent',
+                      boxShadow: color === c ? '0 0 0 1px #374151' : undefined,
+                    }}
+                  />
+                ))}
+              </div>
+              <input
+                type="color"
+                value={color || '#3b82f6'}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full h-7 rounded cursor-pointer border border-gray-200"
+                title="Cor personalizada"
+              />
+              {color && (
+                <button
+                  onClick={() => { onChange(''); setOpen(false); }}
+                  className="mt-1.5 w-full text-[10px] text-gray-400 hover:text-gray-600 transition-colors text-center"
+                >
+                  Remover cor
+                </button>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // --- Exercise Card ---
 
 function ExerciseCard({
@@ -240,25 +314,31 @@ function ExerciseCard({
     <div className="flex flex-col gap-4 py-4 rounded-lg bg-white">
       {/* Title row – with inline thumbnail on mobile */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 md:hidden">
-          <img
-            src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
-            alt={item.name}
-            className="w-full h-full object-cover"
-          />
+        <div className="flex items-center gap-1.5 md:hidden flex-shrink-0">
+          <ColorBar color={item.color} onChange={(c) => onUpdate({ color: c })} className="h-10" />
+          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
+            <img
+              src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
+              alt={item.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
         </div>
         <h3 className="text-sm font-bold text-gray-900 truncate">{item.name}</h3>
       </div>
 
       {/* Content: form only on mobile, thumbnail + form on md+ */}
       <div className="flex gap-4">
-        {/* Thumbnail – desktop only */}
-        <div className="hidden md:block w-36 h-36 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-          <img
-            src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
-            alt={item.name}
-            className="w-full h-full object-cover"
-          />
+        {/* Color bar + Thumbnail – desktop only */}
+        <div className="hidden md:flex items-start gap-2 flex-shrink-0">
+          <ColorBar color={item.color} onChange={(c) => onUpdate({ color: c })} className="h-36" />
+          <div className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100">
+            <img
+              src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
+              alt={item.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
         </div>
 
         {/* Form fields */}
