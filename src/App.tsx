@@ -6,7 +6,6 @@ import { WorkoutEditor } from './components/WorkoutEditor';
 import { AerobicEditor } from './components/AerobicEditor';
 import { AerobicSummary } from './components/AerobicSummary';
 import { StrictTrainingPage } from './components/StrictTrainingPage';
-import { StrictTrainingPageV2 } from './components/StrictTrainingPageV2';
 import { AerobicExecutionPage } from './components/AerobicExecutionPage';
 import { DEFAULT_BLOCKS } from './types/aerobic';
 import type { AerobicWorkout } from './types/aerobic';
@@ -110,7 +109,7 @@ export function App() {
       {isAnyExecuting ? (
         <main className="flex-1 min-w-0 ml-0 md:ml-0 transition-all duration-300">
           {strictExecuting && (
-            <StrictTrainingPageV2
+            <StrictTrainingPage
               sourceExercises={strictExercises}
               onBack={() => setStrictExecuting(false)}
             />
