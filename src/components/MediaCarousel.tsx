@@ -1,19 +1,43 @@
-import { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Media } from '../types/media';
+import { MediaType } from '../types/media';
 import { MediaPreview } from './MediaPreview';
+
+// --- YouTube helpers ---
+function normalizeYoutubeUrl(url: string): string {
+  if (url.includes('youtube.com/shorts/')) {
+    return url.split('?')[0].replace('shorts/', 'watch?v=');
+  }
+  if (url.includes('youtube.com/live/')) {
+    return url.split('?')[0].replace('live/', 'watch?v=');
+  }
+  return url;
+}
+
+function extractYoutubeId(url: string): string | null {
+  const normalized = normalizeYoutubeUrl(url);
+  const match = normalized.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match?.[1] ?? null;
+}
 
 interface MediaCarouselProps {
   items: (Media | null | undefined)[];
   alt?: string;
+  /** When true, YouTube links show a play button and open the embed player on click */
+  playable?: boolean;
 }
 
-export function MediaCarousel({ items, alt = '' }: MediaCarouselProps) {
+export function MediaCarousel({ items, alt = '', playable = false }: MediaCarouselProps) {
   const medias = items.filter((m): m is Media => m != null);
   const [index, setIndex] = useState(0);
-  const [dir, setDir] = useState(1); // 1 = forward, -1 = backward
+  const [dir, setDir] = useState(1);
+  const [playing, setPlaying] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  // Reset player when slide changes
+  useEffect(() => { setPlaying(false); }, [index]);
 
   if (medias.length === 0) return null;
 
@@ -37,6 +61,11 @@ export function MediaCarousel({ items, alt = '' }: MediaCarouselProps) {
     touchStartX.current = null;
   };
 
+  const currentMedia = medias[index];
+  const ytId = playable && currentMedia?.type === MediaType.LINK
+    ? extractYoutubeId(currentMedia.url)
+    : null;
+
   return (
     <div
       className="relative w-full overflow-hidden bg-black"
@@ -58,16 +87,41 @@ export function MediaCarousel({ items, alt = '' }: MediaCarouselProps) {
           exit="exit"
           transition={{ duration: 0.22, ease: 'easeOut' }}
         >
-          <MediaPreview
-            media={medias[index]}
-            alt={`${alt} ${index + 1}`}
-            className="w-full h-auto block"
-          />
+          {ytId && playing ? (
+            // YouTube embed player
+            <div className="relative w-full bg-black" style={{ paddingTop: '56.25%' }}>
+              <iframe
+                className="absolute inset-0 w-full h-full"
+                src={`https://www.youtube.com/embed/${ytId}?autoplay=1`}
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <div className="relative">
+              <MediaPreview
+                media={currentMedia}
+                alt={`${alt} ${index + 1}`}
+                className="w-full h-auto block"
+              />
+              {/* Play button overlay for YouTube when playable */}
+              {ytId && !playing && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                  onClick={() => setPlaying(true)}
+                >
+                  <div className="w-14 h-14 bg-red-600 rounded-xl flex items-center justify-center shadow-lg opacity-90">
+                    <Play size={26} fill="white" stroke="none" className="ml-1" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
 
-      {/* Controls — only when multiple items */}
-      {medias.length > 1 && (
+      {/* Controls — only when multiple items and not playing */}
+      {medias.length > 1 && !playing && (
         <>
           <button
             onClick={prev}

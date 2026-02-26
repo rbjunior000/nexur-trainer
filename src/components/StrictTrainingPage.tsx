@@ -60,6 +60,7 @@ interface FocusStep {
   restAfterStep: number;
   isRestStep?: boolean;
   restStepDuration?: number;
+  isSupersetRest?: boolean;
 }
 
 // --- Conversion ---
@@ -185,14 +186,15 @@ function buildFocusSteps(
           if (setIdx >= exercises[exIdx].sets.length) continue;
 
           const isLastInRound = k === ssIndices.length - 1;
-          let restAfter = 0;
-          if (!isLastInRound) {
-            restAfter = exercises[exIdx].sets[setIdx].rest;
-          } else if (setIdx < maxSets - 1) {
-            restAfter = exercises[exIdx].sets[setIdx].rest;
-          }
+          // Rest only after the last exercise of each round; use its configured set rest directly
+          const restAfter = isLastInRound ? exercises[exIdx].sets[setIdx].rest : 0;
 
-          steps.push({ exerciseIndex: exIdx, setIndex: setIdx, restAfterStep: restAfter });
+          steps.push({
+            exerciseIndex: exIdx,
+            setIndex: setIdx,
+            restAfterStep: restAfter,
+            isSupersetRest: isLastInRound && restAfter > 0,
+          });
         }
       }
     } else {
@@ -391,7 +393,7 @@ function ExerciseCard({
     <div className={`bg-gray-900 rounded-2xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/50' : ''}`}>
       {/* Media carousel */}
       {(exercise.media1 || exercise.media2) && (
-        <MediaCarousel items={[exercise.media1, exercise.media2]} alt={exercise.name} />
+        <MediaCarousel items={[exercise.media1, exercise.media2]} alt={exercise.name} playable />
       )}
 
       <div className="p-4">
@@ -459,6 +461,7 @@ function SupersetCard({
   durationCountdown,
   onToggleSet,
   onUpdateSetField,
+  onExerciseRef,
 }: {
   superset: SupersetGroup;
   exercises: TrainingExercise[];
@@ -469,6 +472,7 @@ function SupersetCard({
   durationCountdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onExerciseRef: (exIdx: number, el: HTMLDivElement | null) => void;
 }) {
   return (
     <div className="relative flex">
@@ -490,10 +494,10 @@ function SupersetCard({
           </span>
         </div>
 
-        {exerciseIndices.map((exIdx, i) => {
+        {exerciseIndices.map((exIdx) => {
           const ex = exercises[exIdx];
           return (
-            <div key={ex.id}>
+            <div key={ex.id} ref={(el) => onExerciseRef(exIdx, el)}>
               <ExerciseCard
                 exercise={ex}
                 exerciseIndex={exIdx}
@@ -504,14 +508,6 @@ function SupersetCard({
                 onToggleSet={onToggleSet}
                 onUpdateSetField={onUpdateSetField}
               />
-              {/* Connector between exercises */}
-              {/* {i < exerciseIndices.length - 1 && (
-                <div className="flex items-center gap-2 py-1 pl-2">
-                  <div className="h-px flex-1 bg-red-500/30" />
-                  <span className="text-red-400 text-[10px] font-bold tracking-wider">+ SUPERSET</span>
-                  <div className="h-px flex-1 bg-red-500/30" />
-                </div>
-              )} */}
             </div>
           );
         })}
@@ -669,11 +665,17 @@ function GuidedView({
   // Rest screen
   if (isResting || isOnRestStep) {
     const countdown = restCountdown ?? currentStep.restStepDuration ?? 0;
+    const isSupersetRest = currentStep.isSupersetRest === true;
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-6 py-8">
         <div className="w-24 h-24 rounded-full bg-yellow-400/10 flex items-center justify-center">
           <Clock size={40} className="text-yellow-400" />
         </div>
+        {isSupersetRest && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400/15 border border-yellow-400/30 text-yellow-400 rounded-full text-[11px] font-bold uppercase tracking-wider">
+            Descanso entre exercícios
+          </span>
+        )}
         <p className="text-gray-400 text-lg font-semibold uppercase tracking-widest">Descanso</p>
         <p className="text-7xl font-bold text-white tabular-nums">{formatTime(countdown)}</p>
         {nextStepLabel && (
@@ -708,7 +710,7 @@ function GuidedView({
 
       {/* Media carousel */}
       {currentExercise.media1 || currentExercise.media2 ? (
-        <MediaCarousel items={[currentExercise.media1, currentExercise.media2]} alt={currentExercise.name} />
+        <MediaCarousel items={[currentExercise.media1, currentExercise.media2]} alt={currentExercise.name} playable />
       ) : (
         <div className="aspect-video bg-gray-900 flex items-center justify-center">
           <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
@@ -823,6 +825,7 @@ export function StrictTrainingPage({
 
   // Refs
   const cardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  const exerciseCardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef({ currentStepIdx, focusSteps });
   stateRef.current = { currentStepIdx, focusSteps };
@@ -875,9 +878,15 @@ export function StrictTrainingPage({
 
   // Scroll to the card containing a given exercise index
   const scrollToExercise = useCallback((exerciseIndex: number) => {
+    // For exercises inside a superset, scroll to the individual exercise card
+    const exEl = exerciseCardRefs.current.get(exerciseIndex);
+    if (exEl) {
+      exEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    // Fallback: scroll to the group card (singles, rests)
     const groupIdx = displayGroups.findIndex((g) => {
       if (g.type === 'single' && g.exerciseIndex === exerciseIndex) return true;
-      if (g.type === 'superset' && g.exerciseIndices.includes(exerciseIndex)) return true;
       if (g.type === 'rest' && g.exerciseIndex === exerciseIndex) return true;
       return false;
     });
@@ -1090,7 +1099,8 @@ export function StrictTrainingPage({
       return `${currentExercise?.name ?? ''} — ${formatTime(durationCountdown ?? 0)}`;
     }
     if (isResting) {
-      return `Descanso — ${formatTime(restCountdown ?? 0)}`;
+      const label = currentStep?.isSupersetRest ? 'Descanso entre exercícios' : 'Descanso';
+      return `${label} — ${formatTime(restCountdown ?? 0)}`;
     }
     if (isOnRestStep) {
       return `Descanso — ${formatTime(restCountdown ?? currentStep?.restStepDuration ?? 0)}`;
@@ -1228,6 +1238,7 @@ export function StrictTrainingPage({
                         durationCountdown={isDurationCounting ? durationCountdown : null}
                         onToggleSet={handleToggleSet}
                         onUpdateSetField={handleUpdateSetField}
+                        onExerciseRef={(exIdx, el) => exerciseCardRefs.current.set(exIdx, el)}
                       />
                     </div>
                   );

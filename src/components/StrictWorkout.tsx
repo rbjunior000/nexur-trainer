@@ -481,7 +481,25 @@ export function StrictWorkout({
                           onDuplicate={() => duplicateExercise(index)}
                           onToggleSuperset={() => {
                             if (!canSuperset) return;
-                            updateExercise(exercise.id, { supersetWithNext: true });
+                            setExercises((prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], supersetWithNext: true };
+
+                              // Find full chain boundaries
+                              let chainStart = index;
+                              while (chainStart > 0 && next[chainStart - 1].supersetWithNext) chainStart--;
+                              let chainEnd = index;
+                              while (chainEnd < next.length - 1 && next[chainEnd].supersetWithNext) chainEnd++;
+
+                              // Last exercise in chain: all sets rest=60. Others: all sets rest=0.
+                              for (let j = chainStart; j <= chainEnd; j++) {
+                                if (next[j].type === 'rest') continue;
+                                const isLast = j === chainEnd;
+                                const ex = next[j];
+                                next[j] = { ...ex, sets: ex.sets.map(s => ({ ...s, rest: isLast ? 60 : 0 })) };
+                              }
+                              return next;
+                            });
                           }}
                           onUnlinkSuperset={() => {
                             setExercises((prev) => {
