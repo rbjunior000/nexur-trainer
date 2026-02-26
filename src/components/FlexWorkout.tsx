@@ -1,14 +1,17 @@
 import { GripVertical, Trash2, Copy, Edit2, Dumbbell } from 'lucide-react';
 import { FlexExercise } from '../types/workout';
 import { motion } from 'framer-motion';
+import { MediaPreview } from './MediaPreview';
+import { MOCK_EXERCISE } from '../data/mockExercise';
+
 const MOCK_FLEX_EXERCISES: FlexExercise[] = [
 {
   id: '1',
-  name: '90/90 com Rotação',
-  thumbnail:
-  'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=400&h=300&fit=crop',
-  category: 'Mobilidade',
-  equipment: 'Chão',
+  name: MOCK_EXERCISE.title,
+  media1: MOCK_EXERCISE.media1,
+  media2: MOCK_EXERCISE.media2,
+  category: MOCK_EXERCISE.exerciseCategoryText,
+  equipment: MOCK_EXERCISE.equipmentTypeText,
   methodology: '',
   reps: '',
   load: '',
@@ -17,16 +20,16 @@ const MOCK_FLEX_EXERCISES: FlexExercise[] = [
 },
 {
   id: '2',
-  name: 'Agachamento Livre',
-  thumbnail:
-  'https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=400&h=300&fit=crop',
-  category: 'Pernas',
-  equipment: 'Barra',
-  methodology: 'Salvou',
-  reps: 'Salvou',
-  load: 'Salvou',
-  interval: '33',
-  notes: 'Salvou'
+  name: MOCK_EXERCISE.title,
+  media1: MOCK_EXERCISE.media1,
+  media2: MOCK_EXERCISE.media2,
+  category: MOCK_EXERCISE.exerciseCategoryText,
+  equipment: MOCK_EXERCISE.equipmentTypeText,
+  methodology: 'Pirâmide',
+  reps: '12/10/8',
+  load: '40kg',
+  interval: '60s',
+  notes: 'Foco na fase excêntrica'
 }];
 
 export function FlexWorkout() {
@@ -66,10 +69,7 @@ export function FlexWorkout() {
             <div className="flex gap-x-4">
               {/* Thumbnail */}
               <div className="w-36 h-36 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                <img
-                src={exercise.thumbnail}
-                alt={exercise.name}
-                className="w-full h-full object-cover" />
+                <MediaPreview media={exercise.media1} alt={exercise.name} />
               </div>
 
               {/* Form fields */}

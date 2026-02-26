@@ -17,7 +17,11 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { StrictExercise } from '../types/workout';
-import { formatTime, formatElapsed } from '../utils/formatTime';
+import type { Media } from '../types/media';
+import { getMediaPreviewUrl } from '../types/media';
+import { MediaPreview } from './MediaPreview';
+import { MediaCarousel } from './MediaCarousel';
+import { formatTime, formatElapsed, parseDurationToSeconds } from '../utils/formatTime';
 
 // --- Internal types ---
 interface TrainingSet {
@@ -33,7 +37,8 @@ interface TrainingSet {
 interface TrainingExercise {
   id: string;
   name: string;
-  thumbnail: string;
+  media1: Media | null;
+  media2: Media | null;
   type: string;
   sets: TrainingSet[];
   notes: string;
@@ -63,7 +68,8 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     return {
       id: ex.id,
       name: 'Descanso',
-      thumbnail: '',
+      media1: null,
+      media2: null,
       type: 'rest',
       notes: '',
       sets: [],
@@ -74,7 +80,8 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
   return {
     id: ex.id,
     name: ex.name,
-    thumbnail: ex.thumbnail,
+    media1: ex.media1,
+    media2: ex.media2,
     type: ex.type,
     notes: ex.notes,
     supersetId,
@@ -250,6 +257,7 @@ function SetRow({
   isCurrent,
   showWeight,
   restCountdown,
+  durationCountdown,
   onToggle,
   onUpdateField,
 }: {
@@ -259,6 +267,7 @@ function SetRow({
   isCurrent: boolean;
   showWeight: boolean;
   restCountdown: number | null;
+  durationCountdown: number | null;
   onToggle: () => void;
   onUpdateField: (field: keyof TrainingSet, value: number | string) => void;
 }) {
@@ -304,7 +313,10 @@ function SetRow({
             </td>
           )}
           <td className="py-2.5 px-2">
-            <span className="text-white text-sm font-semibold">{set.duration || '00:00'}</span>
+            {isCurrent && durationCountdown !== null
+              ? <span className="text-yellow-400 text-sm font-bold animate-pulse tabular-nums">{formatTime(durationCountdown)}</span>
+              : <span className="text-white text-sm font-semibold">{set.duration || '00:00'}</span>
+            }
           </td>
         </>
       )}
@@ -350,6 +362,7 @@ function ExerciseCard({
   currentExerciseIndex,
   currentSetIndex,
   restCountdown,
+  durationCountdown,
   onToggleSet,
   onUpdateSetField,
 }: {
@@ -358,6 +371,7 @@ function ExerciseCard({
   currentExerciseIndex: number;
   currentSetIndex: number;
   restCountdown: number | null;
+  durationCountdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
 }) {
@@ -375,20 +389,9 @@ function ExerciseCard({
 
   return (
     <div className={`bg-gray-900 rounded-2xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/50' : ''}`}>
-      {/* Thumbnail */}
-      {exercise.thumbnail && (
-        <div className="relative aspect-video">
-          <img
-            src={exercise.thumbnail}
-            alt={exercise.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
-              <Play size={20} className="text-white ml-0.5" />
-            </div>
-          </div>
-        </div>
+      {/* Media carousel */}
+      {(exercise.media1 || exercise.media2) && (
+        <MediaCarousel items={[exercise.media1, exercise.media2]} alt={exercise.name} />
       )}
 
       <div className="p-4">
@@ -426,6 +429,7 @@ function ExerciseCard({
                 isCurrent={isCurrent && si === currentSetIndex}
                 showWeight={exercise.type !== 'duration' || hasWeight}
                 restCountdown={isCurrent && si === currentSetIndex ? restCountdown : null}
+                durationCountdown={isCurrent && si === currentSetIndex ? durationCountdown : null}
                 onToggle={() => onToggleSet(exerciseIndex, si)}
                 onUpdateField={(field, value) => onUpdateSetField(exerciseIndex, si, field, value)}
               />
@@ -452,6 +456,7 @@ function SupersetCard({
   currentExerciseIndex,
   currentSetIndex,
   restCountdown,
+  durationCountdown,
   onToggleSet,
   onUpdateSetField,
 }: {
@@ -461,6 +466,7 @@ function SupersetCard({
   currentExerciseIndex: number;
   currentSetIndex: number;
   restCountdown: number | null;
+  durationCountdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
 }) {
@@ -494,6 +500,7 @@ function SupersetCard({
                 currentExerciseIndex={currentExerciseIndex}
                 currentSetIndex={currentSetIndex}
                 restCountdown={restCountdown}
+                durationCountdown={durationCountdown}
                 onToggleSet={onToggleSet}
                 onUpdateSetField={onUpdateSetField}
               />
@@ -616,6 +623,8 @@ function GuidedView({
   isResting,
   isOnRestStep,
   nextStepLabel,
+  isDurationCounting,
+  durationCountdown,
 }: {
   exercises: TrainingExercise[];
   supersets: SupersetGroup[];
@@ -625,6 +634,8 @@ function GuidedView({
   isResting: boolean;
   isOnRestStep: boolean;
   nextStepLabel: string;
+  isDurationCounting: boolean;
+  durationCountdown: number | null;
 }) {
   const currentStep = focusSteps[currentStepIdx];
   if (!currentStep) return null;
@@ -638,6 +649,22 @@ function GuidedView({
   const totalInSS = ss ? ss.exerciseIds.length : 0;
   const setIdx = currentStep.setIndex;
   const totalSets = currentExercise?.sets.length ?? 0;
+
+  // Duration countdown screen
+  if (isDurationCounting) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 px-6 py-8">
+        <div className="w-24 h-24 rounded-full bg-yellow-400/10 flex items-center justify-center">
+          <Clock size={40} className="text-yellow-400" />
+        </div>
+        <p className="text-gray-400 text-lg font-semibold uppercase tracking-widest">Duração</p>
+        <p className="text-7xl font-bold text-white tabular-nums">{formatTime(durationCountdown ?? 0)}</p>
+        {currentExercise && (
+          <p className="text-gray-500 text-sm font-medium">{currentExercise.name}</p>
+        )}
+      </div>
+    );
+  }
 
   // Rest screen
   if (isResting || isOnRestStep) {
@@ -679,29 +706,16 @@ function GuidedView({
       {/* Divider */}
       <div className="h-px bg-gray-800" />
 
-      {/* Thumbnail */}
-      <div className="relative aspect-video bg-gray-900">
-        {currentExercise.thumbnail ? (
-          <>
-            <img
-              src={currentExercise.thumbnail}
-              alt={currentExercise.name}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
-                <Play size={24} className="text-white ml-0.5" />
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
-              <Play size={28} className="text-gray-600 ml-0.5" />
-            </div>
+      {/* Media carousel */}
+      {currentExercise.media1 || currentExercise.media2 ? (
+        <MediaCarousel items={[currentExercise.media1, currentExercise.media2]} alt={currentExercise.name} />
+      ) : (
+        <div className="aspect-video bg-gray-900 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
+            <Play size={28} className="text-gray-600 ml-0.5" />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Info section */}
       <div className="bg-gray-900 px-4 pt-5 pb-6 space-y-5">
@@ -800,10 +814,12 @@ export function StrictTrainingPage({
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
   const [restCountdown, setRestCountdown] = useState<number | null>(null);
+  const [durationCountdown, setDurationCountdown] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'guided'>('list');
 
   const isResting = restCountdown !== null && restCountdown > 0;
+  const isDurationCounting = durationCountdown !== null && durationCountdown > 0;
 
   // Refs
   const cardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
@@ -832,6 +848,15 @@ export function StrictTrainingPage({
     }, 1000);
     return () => clearInterval(id);
   }, [isRunning, restCountdown]);
+
+  // Duration countdown timer
+  useEffect(() => {
+    if (!isRunning || durationCountdown === null || durationCountdown <= 0) return;
+    const id = setInterval(() => {
+      setDurationCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, durationCountdown]);
 
   // Auto-start rest on rest steps
   useEffect(() => {
@@ -881,6 +906,39 @@ export function StrictTrainingPage({
     }
   }, [scrollToExercise]);
 
+  // Complete current set and start rest or advance (used for duration auto-complete)
+  const completeCurrentSet = useCallback(() => {
+    if (!currentSet || !currentStep) return;
+    setDurationCountdown(null);
+    setCompletedSetIds((prev) => {
+      const next = new Set(prev);
+      next.add(currentSet.id);
+      return next;
+    });
+    setExercises((prev) =>
+      prev.map((e, ei) =>
+        ei === currentStep.exerciseIndex
+          ? { ...e, sets: e.sets.map((s, si) => si === currentStep.setIndex ? { ...s, completed: true } : s) }
+          : e
+      )
+    );
+    const rest = currentStep.restAfterStep;
+    if (rest > 0 && currentStepIdx < focusSteps.length - 1) {
+      setRestCountdown(rest);
+    } else {
+      advanceStep();
+    }
+  }, [currentSet, currentStep, currentStepIdx, focusSteps.length, advanceStep]);
+
+  // Auto-complete duration set when countdown reaches 0
+  const completeCurrentSetRef = useRef(completeCurrentSet);
+  completeCurrentSetRef.current = completeCurrentSet;
+  useEffect(() => {
+    if (durationCountdown === 0) {
+      completeCurrentSetRef.current();
+    }
+  }, [durationCountdown]);
+
   // --- Footer Next handler ---
   const handleNext = useCallback(() => {
     if (isResting) {
@@ -895,7 +953,22 @@ export function StrictTrainingPage({
       return;
     }
 
+    if (isDurationCounting) {
+      // Skip duration countdown → complete set
+      completeCurrentSet();
+      return;
+    }
+
     if (!currentSet || !currentStep) return;
+
+    // Duration type: start countdown instead of completing immediately
+    if (currentExercise?.type === 'duration') {
+      const secs = parseDurationToSeconds(currentSet.duration || '');
+      if (secs > 0) {
+        setDurationCountdown(secs);
+        return;
+      }
+    }
 
     // Mark set completed
     setCompletedSetIds((prev) => {
@@ -923,7 +996,7 @@ export function StrictTrainingPage({
     } else {
       advanceStep();
     }
-  }, [isResting, isOnRestStep, currentSet, currentStep, currentStepIdx, focusSteps.length, advanceStep]);
+  }, [isResting, isOnRestStep, isDurationCounting, currentSet, currentStep, currentExercise, currentStepIdx, focusSteps.length, advanceStep, completeCurrentSet]);
 
   // --- Footer Prev handler ---
   const handlePrev = useCallback(() => {
@@ -1013,6 +1086,9 @@ export function StrictTrainingPage({
 
   // Step info label for footer
   const stepInfoLabel = useMemo(() => {
+    if (isDurationCounting) {
+      return `${currentExercise?.name ?? ''} — ${formatTime(durationCountdown ?? 0)}`;
+    }
     if (isResting) {
       return `Descanso — ${formatTime(restCountdown ?? 0)}`;
     }
@@ -1023,7 +1099,7 @@ export function StrictTrainingPage({
       return `${currentExercise.name} — Série ${currentStep.setIndex + 1}/${currentExercise.sets.length}`;
     }
     return '';
-  }, [isResting, isOnRestStep, restCountdown, currentStep, currentExercise]);
+  }, [isDurationCounting, isResting, isOnRestStep, durationCountdown, restCountdown, currentStep, currentExercise]);
 
   // Next step preview label
   const nextStepLabel = useMemo(() => {
@@ -1045,10 +1121,11 @@ export function StrictTrainingPage({
 
   // What the Next button should say
   const nextButtonLabel = useMemo(() => {
-    if (isResting || isOnRestStep) return 'Pular';
+    if (isResting || isOnRestStep || isDurationCounting) return 'Pular';
     if (currentStepIdx >= focusSteps.length - 1) return 'Finalizar';
+    if (currentExercise?.type === 'duration') return 'Iniciar';
     return 'Próximo';
-  }, [isResting, isOnRestStep, currentStepIdx, focusSteps.length]);
+  }, [isResting, isOnRestStep, isDurationCounting, currentStepIdx, focusSteps.length, currentExercise]);
 
   const hasPrev = currentStepIdx > 0;
   const hasNext = currentStepIdx < focusSteps.length;
@@ -1084,7 +1161,7 @@ export function StrictTrainingPage({
           {/* Step info bar */}
           <div className="px-4 py-2 border-b border-gray-800/50">
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-semibold truncate ${isResting || isOnRestStep ? 'text-yellow-400' : 'text-white'}`}>
+              <span className={`text-sm font-semibold truncate ${isResting || isOnRestStep || isDurationCounting ? 'text-yellow-400' : 'text-white'}`}>
                 {stepInfoLabel}
               </span>
               <span className="text-xs text-gray-500 font-medium tabular-nums ml-2 flex-shrink-0">
@@ -1113,6 +1190,8 @@ export function StrictTrainingPage({
               isResting={isResting}
               isOnRestStep={isOnRestStep}
               nextStepLabel={nextStepLabel}
+              isDurationCounting={isDurationCounting}
+              durationCountdown={durationCountdown}
             />
           </div>
         ) : (
@@ -1146,6 +1225,7 @@ export function StrictTrainingPage({
                         currentExerciseIndex={highlightExerciseIndex}
                         currentSetIndex={highlightSetIndex}
                         restCountdown={isResting ? restCountdown : null}
+                        durationCountdown={isDurationCounting ? durationCountdown : null}
                         onToggleSet={handleToggleSet}
                         onUpdateSetField={handleUpdateSetField}
                       />
@@ -1161,6 +1241,7 @@ export function StrictTrainingPage({
                       currentExerciseIndex={highlightExerciseIndex}
                       currentSetIndex={highlightSetIndex}
                       restCountdown={isResting ? restCountdown : null}
+                      durationCountdown={isDurationCounting ? durationCountdown : null}
                       onToggleSet={handleToggleSet}
                       onUpdateSetField={handleUpdateSetField}
                     />

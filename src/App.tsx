@@ -10,11 +10,14 @@ import { AerobicExecutionPage } from './components/AerobicExecutionPage';
 import { DEFAULT_BLOCKS } from './types/aerobic';
 import type { AerobicWorkout } from './types/aerobic';
 import type { StrictExercise } from './types/workout';
+import type { Media } from './types/media';
 
 export type LibraryExercise = {
   name: string;
   category: string;
   equipment: string;
+  media1: Media | null;
+  media2: Media | null;
 };
 
 type Page = 'strict' | 'aerobico' | 'autoplay';

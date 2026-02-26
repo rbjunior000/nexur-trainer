@@ -1,3 +1,6 @@
+import { Media } from './media';
+export type { Media };
+
 export type ExerciseType =
 'weight_reps' |
 'duration' |
@@ -7,7 +10,8 @@ export type ExerciseType =
 export interface Exercise {
   id: string;
   name: string;
-  thumbnail: string;
+  media1: Media | null;
+  media2: Media | null;
   category: string;
   equipment: string;
 }
@@ -48,7 +52,8 @@ export function makeRestExercise(duration?: number): StrictExercise {
   return {
     id: `rest_${++_typeIdCounter}_${Date.now()}`,
     name: 'Descanso',
-    thumbnail: '',
+    media1: null,
+    media2: null,
     category: '',
     equipment: '',
     type: 'rest',

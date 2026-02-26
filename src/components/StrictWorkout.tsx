@@ -21,6 +21,8 @@ import {
   StrictSet,
   makeRestExercise,
 } from '../types/workout';
+import { getMediaPreviewUrl } from '../types/media';
+import { MediaPreview } from './MediaPreview';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DndContext,
@@ -246,7 +248,8 @@ export function StrictWorkout({
     const newExercise: StrictExercise = {
       id: uid(),
       name: ex.name,
-      thumbnail: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop',
+      media1: ex.media1,
+      media2: ex.media2,
       category: ex.category,
       equipment: ex.equipment,
       type: defaultExerciseType,
@@ -521,7 +524,7 @@ export function StrictWorkout({
                 <div className="flex items-center gap-3 py-4 px-4 rounded-xl bg-white border border-gray-200">
                   <GripVertical size={18} className="text-gray-300" />
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                    <img src={activeExercise.thumbnail} alt={activeExercise.name} className="w-full h-full object-cover" />
+                    <MediaPreview media={activeExercise.media1} alt={activeExercise.name} />
                   </div>
                   <span className="text-sm font-bold text-gray-900">{activeExercise.name}</span>
                   <span className="text-xs text-gray-400 ml-auto">{activeExercise.sets.length} séries</span>
@@ -752,7 +755,7 @@ function ExerciseCard({
       {/* Title row – with inline thumbnail on mobile */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 md:hidden">
-          <img src={exercise.thumbnail} alt={exercise.name} className="w-full h-full object-cover" />
+          <MediaPreview media={exercise.media1} alt={exercise.name} />
         </div>
         <h3 className="text-sm font-bold text-gray-900 truncate">{exercise.name}</h3>
       </div>
@@ -761,7 +764,7 @@ function ExerciseCard({
       <div className="flex gap-4">
         {/* Thumbnail – desktop only */}
         <div className="hidden md:block w-36 h-36 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-          <img src={exercise.thumbnail} alt={exercise.name} className="w-full h-full object-cover" />
+          <MediaPreview media={exercise.media1} alt={exercise.name} />
         </div>
 
         {/* Form fields */}

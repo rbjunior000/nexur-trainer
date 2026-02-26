@@ -16,6 +16,7 @@ import {
   makeBlock,
 } from '../types/autoplay';
 import type { AutoplayItem, AutoplayBlock } from '../types/autoplay';
+import { MediaPreview } from './MediaPreview';
 import type { LibraryExercise } from '../App';
 
 // --- Helpers ---
@@ -317,11 +318,7 @@ function ExerciseCard({
         <div className="flex items-center gap-1.5 md:hidden flex-shrink-0">
           <ColorBar color={item.color} onChange={(c) => onUpdate({ color: c })} className="h-10" />
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
-            <img
-              src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
-              alt={item.name}
-              className="w-full h-full object-cover"
-            />
+            <MediaPreview media={item.media1} alt={item.name} />
           </div>
         </div>
         <h3 className="text-sm font-bold text-gray-900 truncate">{item.name}</h3>
@@ -333,11 +330,7 @@ function ExerciseCard({
         <div className="hidden md:flex items-start gap-2 flex-shrink-0">
           <ColorBar color={item.color} onChange={(c) => onUpdate({ color: c })} className="h-36" />
           <div className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100">
-            <img
-              src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop"
-              alt={item.name}
-              className="w-full h-full object-cover"
-            />
+            <MediaPreview media={item.media1} alt={item.name} />
           </div>
         </div>
 
@@ -606,7 +599,7 @@ export function AutoplayWorkout({
   const addFromLibrary = useCallback((ex: LibraryExercise) => {
     setItems((prev) => [
       ...prev,
-      makeExerciseItem(ex.name, ex.category, ex.equipment),
+      { ...makeExerciseItem(ex.name, ex.category, ex.equipment), media1: ex.media1, media2: ex.media2 },
     ]);
   }, []);
 

@@ -1,9 +1,14 @@
+import { Media } from './media';
+export type { Media };
+
 export type AutoplayItemType = 'exercise' | 'rest';
 
 export interface AutoplayItem {
   id: string;
   type: AutoplayItemType;
   name: string;
+  media1: Media | null;
+  media2: Media | null;
   category: string;
   equipment: string;
   duration: number; // em segundos
@@ -45,6 +50,8 @@ export function makeExerciseItem(name: string, category: string, equipment: stri
     id: uid(),
     type: 'exercise',
     name,
+    media1: null,
+    media2: null,
     category,
     equipment,
     duration: 30,
@@ -58,6 +65,8 @@ export function makeRestItem(duration = 10): AutoplayItem {
     id: uid(),
     type: 'rest',
     name: 'Descanso',
+    media1: null,
+    media2: null,
     category: '',
     equipment: '',
     duration,

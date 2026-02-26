@@ -2,21 +2,10 @@ import { useState } from 'react';
 import { Search, Filter, Plus, Check, Dumbbell, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LibraryExercise } from '../App';
+import { MediaPreview } from './MediaPreview';
+import { MOCK_LIBRARY_EXERCISES } from '../data/mockExercise';
 
-const MOCK_EXERCISES = [
-  { id: '1', name: '90/90 com Rotação', category: 'Mobilidade', equipment: 'Chão', color: 'bg-green-100' },
-  { id: '2', name: 'Supino Reto', category: 'Peito', equipment: 'Barra', color: 'bg-blue-100' },
-  { id: '3', name: 'Agachamento Livre', category: 'Pernas', equipment: 'Barra', color: 'bg-red-100' },
-  { id: '4', name: 'Rosca Direta', category: 'Bíceps', equipment: 'Haltere', color: 'bg-yellow-100' },
-  { id: '5', name: 'Prancha', category: 'Core', equipment: 'Chão', color: 'bg-purple-100' },
-  { id: '6', name: 'Corrida Esteira', category: 'Cardio', equipment: 'Máquina', color: 'bg-orange-100' },
-  { id: '7', name: 'Abdomen Crunch', category: 'Abdominal', equipment: 'Casa', color: 'bg-teal-100' },
-  { id: '8', name: 'Tríceps Corda', category: 'Tríceps', equipment: 'Cabo', color: 'bg-indigo-100' },
-  { id: '9', name: 'Stiff', category: 'Posterior', equipment: 'Barra', color: 'bg-rose-100' },
-  { id: '10', name: 'Panturrilha em Pé', category: 'Pernas', equipment: 'Máquina', color: 'bg-amber-100' },
-  { id: '11', name: 'Farmer Walk', category: 'Funcional', equipment: 'Haltere', color: 'bg-cyan-100' },
-  { id: '12', name: 'Agachamento Búlgaro', category: 'Pernas', equipment: 'Haltere', color: 'bg-red-100' },
-];
+const MOCK_EXERCISES = MOCK_LIBRARY_EXERCISES;
 
 export function ExerciseListContent({
   onAddExercise,
@@ -35,6 +24,8 @@ export function ExerciseListContent({
       name: exercise.name,
       category: exercise.category,
       equipment: exercise.equipment,
+      media1: exercise.media1,
+      media2: exercise.media2,
     });
     setJustAdded(exercise.id);
     setTimeout(() => setJustAdded(null), 1200);
@@ -85,9 +76,9 @@ export function ExerciseListContent({
                 }`}
                 onClick={() => handleAdd(exercise)}
               >
-                <div
-                  className={`w-10 h-10 rounded-lg ${exercise.color} flex-shrink-0`}
-                />
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                  <MediaPreview media={exercise.media1} alt={exercise.name} />
+                </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-gray-900 text-sm truncate">
                     {exercise.name}
