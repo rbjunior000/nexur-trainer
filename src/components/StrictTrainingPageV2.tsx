@@ -442,7 +442,7 @@ function ExerciseCard({
   );
 }
 
-// --- Superset Card (Carousel) ---
+// --- Superset Card (Stacked) ---
 function SupersetCard({
   superset,
   exercises,
@@ -462,40 +462,30 @@ function SupersetCard({
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
 }) {
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const cardRefsLocal = useRef<Map<number, HTMLDivElement | null>>(new Map());
-
-  // Auto-scroll carousel to active exercise
-  useEffect(() => {
-    if (!exerciseIndices.includes(currentExerciseIndex)) return;
-    const el = cardRefsLocal.current.get(currentExerciseIndex);
-    if (el && carouselRef.current) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
-    }
-  }, [currentExerciseIndex, exerciseIndices]);
-
   return (
-    <div className="border-2 border-red-500 rounded-2xl overflow-hidden">
-      {/* Superset Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-900/80">
-        <span className="px-2.5 py-1 bg-red-500 text-white text-xs font-bold rounded-md">
-          Superset
-        </span>
-        <span className="text-gray-400 text-sm font-medium">
-          {superset.rounds} Ciclos
-        </span>
+    <div className="relative flex">
+      {/* Superset side bar */}
+      <div className="flex flex-col items-center mr-3 pt-1">
+        <div className="w-0.5 flex-1 bg-red-500/60 rounded-full" />
+        <div className="w-0.5 flex-1 bg-red-500/60 rounded-full" />
       </div>
 
-      {/* Horizontal Carousel */}
-      <div ref={carouselRef} className="overflow-x-auto snap-x snap-mandatory flex gap-0 hide-scrollbar">
-        {exerciseIndices.map((exIdx) => {
+      {/* Stacked exercises */}
+      <div className="flex-1 flex flex-col gap-3">
+        {/* Superset label row */}
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 bg-red-500 text-white text-xs font-bold rounded-md">
+            Superset
+          </span>
+          <span className="text-gray-400 text-sm font-medium">
+            {superset.rounds} Ciclos
+          </span>
+        </div>
+
+        {exerciseIndices.map((exIdx, i) => {
           const ex = exercises[exIdx];
           return (
-            <div
-              key={ex.id}
-              ref={(el) => { cardRefsLocal.current.set(exIdx, el); }}
-              className="snap-start flex-shrink-0 w-[90%]"
-            >
+            <div key={ex.id}>
               <ExerciseCard
                 exercise={ex}
                 exerciseIndex={exIdx}
@@ -505,6 +495,14 @@ function SupersetCard({
                 onToggleSet={onToggleSet}
                 onUpdateSetField={onUpdateSetField}
               />
+              {/* Connector between exercises */}
+              {/* {i < exerciseIndices.length - 1 && (
+                <div className="flex items-center gap-2 py-1 pl-2">
+                  <div className="h-px flex-1 bg-red-500/30" />
+                  <span className="text-red-400 text-[10px] font-bold tracking-wider">+ SUPERSET</span>
+                  <div className="h-px flex-1 bg-red-500/30" />
+                </div>
+              )} */}
             </div>
           );
         })}
