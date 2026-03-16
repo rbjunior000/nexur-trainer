@@ -488,18 +488,6 @@ export function StrictWorkout({
               <SortableExerciseItem key={exercise.id} id={exercise.id}>
                 {(handleProps) => (
                   <>
-                    {/* Inline +Descanso button between exercises */}
-                    {index > 0 && !prevLinked && !isRest && exercises[index - 1].type !== 'rest' && (
-                      <div className="flex justify-center py-1 group">
-                        <button
-                          onClick={() => insertRestAt(index)}
-                          className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-gray-400 bg-gray-50 hover:bg-yellow-50 hover:text-yellow-600 rounded-full border border-dashed border-gray-200 hover:border-yellow-300 transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <Timer size={12} />
-                          Descanso
-                        </button>
-                      </div>
-                    )}
 
                     {isFirst && index > 0 && !isRest && (
                       <div className="mt-4" />
@@ -580,6 +568,7 @@ export function StrictWorkout({
                               return next;
                             });
                           }}
+                          onAddRestAfter={() => insertRestAt(index + 1)}
                           isLast={isLast(index)}
                           canSuperset={canSuperset}
                           isPartOfSuperset={linked}
@@ -845,7 +834,77 @@ function ExerciseCard({
             <MediaPreview media={exercise.media1} alt={exercise.name} />
           </div>
         </div>
-        <h3 className="text-sm font-bold text-gray-900 truncate">{exercise.name}</h3>
+        <h3 className="text-sm font-bold text-gray-900 truncate flex-1">{exercise.name}</h3>
+        {/* Mobile actions — inline in title row */}
+        <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+          <button
+            {...dragHandleProps}
+            className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
+          >
+            <GripVertical size={18} />
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="flex items-center justify-center p-2 text-gray-300 hover:text-gray-600 transition-colors"
+            >
+              <MoreVertical size={18} />
+            </button>
+            <AnimatePresence>
+              {isMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
+                  >
+                    {isPartOfSuperset && (
+                      <button
+                        onClick={() => { onUnlinkSuperset(); setIsMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-orange-500"
+                      >
+                        <Link size={15} />
+                        Remover superset
+                      </button>
+                    )}
+                    {!isLast && !exercise.supersetWithNext && (
+                      <button
+                        onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
+                      >
+                        <Link size={15} className="text-gray-400" />
+                        Superset com próximo
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { onDuplicate(); setIsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
+                    >
+                      <Copy size={15} className="text-gray-400" />
+                      Duplicar exercício
+                    </button>
+                    <button
+                      onClick={() => { onAddRestAfter(); setIsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
+                    >
+                      <Timer size={15} className="text-gray-400" />
+                      Adicionar descanso
+                    </button>
+                    <button
+                      onClick={() => { onRemove(); setIsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-red-500"
+                    >
+                      <Trash2 size={15} />
+                      Remover exercício
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
 
       {/* Content: form only on mobile, thumbnail + form on md+ */}
@@ -1219,69 +1278,6 @@ function ExerciseCard({
         </div>
       </div>
 
-      {/* Mobile action buttons – horizontal row */}
-      <div className="flex md:hidden items-center justify-end gap-1 pt-1 border-t border-gray-100">
-        <button
-          {...dragHandleProps}
-          className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
-        >
-          <GripVertical size={18} />
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="flex items-center justify-center p-2 text-gray-300 hover:text-gray-600 transition-colors"
-          >
-            <MoreVertical size={18} />
-          </button>
-          <AnimatePresence>
-            {isMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                  className="absolute right-0 bottom-full mb-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
-                >
-                  {isPartOfSuperset && (
-                    <button
-                      onClick={() => { onUnlinkSuperset(); setIsMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-orange-500"
-                    >
-                      <Link size={15} />
-                      Remover superset
-                    </button>
-                  )}
-                  {!isLast && !exercise.supersetWithNext && (
-                    <button
-                      onClick={() => { onToggleSuperset(); setIsMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
-                    >
-                      <Link size={15} className="text-gray-400" />
-                      Superset com próximo
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { onDuplicate(); setIsMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-gray-600"
-                  >
-                    <Copy size={15} className="text-gray-400" />
-                    Duplicar exercício
-                  </button>
-                  <button
-                    onClick={() => { onRemove(); setIsMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-red-500"
-                  >
-                    <Trash2 size={15} />
-                    Remover exercício
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
     </div>
   );
 }
