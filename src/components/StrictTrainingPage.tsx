@@ -14,6 +14,8 @@ import {
   SkipForward,
   List,
   Maximize2,
+  LayoutList,
+  Image,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { StrictExercise } from '../types/workout';
@@ -549,6 +551,147 @@ function RestBlockCard({
   );
 }
 
+// --- Compact helpers ---
+function summarizeSets(exercise: TrainingExercise): string {
+  const count = exercise.sets.length;
+  if (count === 0) return '';
+  const first = exercise.sets[0];
+  if (exercise.type === 'weight_reps') {
+    const reps = first.reps ?? 0;
+    const weight = first.weight ?? 0;
+    return weight > 0 ? `${count}x${reps} — ${weight}kg` : `${count}x${reps}`;
+  }
+  if (exercise.type === 'duration') {
+    return `${count}x ${first.duration || '00:00'}`;
+  }
+  if (exercise.type === 'distance') {
+    const dist = first.distance ?? 0;
+    return `${count}x ${dist}m`;
+  }
+  return `${count} séries`;
+}
+
+function CompactExerciseRow({
+  exercise,
+  exerciseIndex,
+  isCurrent,
+  onTap,
+}: {
+  exercise: TrainingExercise;
+  exerciseIndex: number;
+  isCurrent: boolean;
+  onTap?: (idx: number) => void;
+}) {
+  const completedCount = exercise.sets.filter((s) => s.completed).length;
+  const total = exercise.sets.length;
+  const allDone = completedCount === total && total > 0;
+  const media = exercise.media1 ?? exercise.media2;
+  const previewUrl = media ? getMediaPreviewUrl(media) : null;
+  const summary = summarizeSets(exercise);
+  const corColor = exercise.cor && exercise.cor !== '#f1f1f1' ? exercise.cor : '#6b7280';
+
+  return (
+    <button
+      className={`w-full flex items-center bg-gray-900 rounded-xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/60' : ''}`}
+      onClick={() => onTap?.(exerciseIndex)}
+    >
+      {/* Color bar */}
+      <div className="w-1 self-stretch flex-shrink-0" style={{ backgroundColor: corColor }} />
+
+      {/* Thumbnail */}
+      <div className="w-16 h-16 flex-shrink-0 bg-gray-800 flex items-center justify-center overflow-hidden">
+        {previewUrl ? (
+          <img src={previewUrl} alt={exercise.name} className="w-full h-full object-cover" />
+        ) : (
+          <Image size={20} className="text-gray-600" />
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 px-3 text-left min-w-0">
+        <p className="text-white text-sm font-semibold truncate">{exercise.name}</p>
+        {summary && <p className="text-gray-400 text-xs mt-0.5">{summary}</p>}
+      </div>
+
+      {/* Completion badge */}
+      <div className={`w-8 h-8 rounded-full flex-shrink-0 mr-3 flex items-center justify-center border-2 transition-all ${
+        allDone
+          ? 'bg-green-500 border-green-500 text-white'
+          : isCurrent
+          ? 'border-yellow-400 text-gray-500'
+          : 'border-gray-700 text-gray-500'
+      }`}>
+        {allDone ? (
+          <Check size={14} strokeWidth={3} />
+        ) : (
+          <span className="text-[10px] font-bold tabular-nums">{completedCount}/{total}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function CompactView({
+  exercises,
+  displayGroups,
+  highlightExerciseIndex,
+  onScrollTo,
+}: {
+  exercises: TrainingExercise[];
+  displayGroups: DisplayGroup[];
+  highlightExerciseIndex: number;
+  onScrollTo: (idx: number) => void;
+}) {
+  return (
+    <div className="pb-4 px-4 pt-4 space-y-2">
+      {displayGroups.map((group, groupIdx) => {
+        if (group.type === 'rest') {
+          const ex = exercises[group.exerciseIndex];
+          return (
+            <div key={`rest-${group.exerciseIndex}-${groupIdx}`} className="flex items-center gap-3 bg-gray-900 rounded-xl px-4 py-3">
+              <Clock size={14} className="text-gray-500 flex-shrink-0" />
+              <span className="text-gray-400 text-sm">Descanso — {formatRest(ex.restDuration ?? 0)}</span>
+            </div>
+          );
+        }
+
+        if (group.type === 'superset') {
+          return (
+            <div key={group.superset.id} className="relative flex">
+              <div className="w-0.5 bg-red-500/60 rounded-full mr-3 flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center gap-2 px-1 pb-0.5">
+                  <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-md">Superset</span>
+                  <span className="text-gray-400 text-xs">{group.superset.rounds} ciclos</span>
+                </div>
+                {group.exerciseIndices.map((exIdx) => (
+                  <CompactExerciseRow
+                    key={exercises[exIdx].id}
+                    exercise={exercises[exIdx]}
+                    exerciseIndex={exIdx}
+                    isCurrent={highlightExerciseIndex === exIdx}
+                    onTap={onScrollTo}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <CompactExerciseRow
+            key={exercises[group.exerciseIndex].id}
+            exercise={exercises[group.exerciseIndex]}
+            exerciseIndex={group.exerciseIndex}
+            isCurrent={highlightExerciseIndex === group.exerciseIndex}
+            onTap={onScrollTo}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 // --- Summary Modal (dark version) ---
 function SummaryModal({
   exercises,
@@ -823,7 +966,8 @@ export function StrictTrainingPage({
   const [phase, setPhase] = useState<Phase>('work');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'guided'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'guided' | 'compact'>('list');
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   const isResting = phase === 'rest';
   const isWorkCountdown = phase === 'work' && countdown !== null;
@@ -1103,12 +1247,43 @@ export function StrictTrainingPage({
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
             <h1 className="text-white font-bold text-base truncate">{workoutName}</h1>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setViewMode(viewMode === 'guided' ? 'list' : 'guided')}
-                className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-              >
-                {viewMode === 'guided' ? <List size={16} /> : <Maximize2 size={14} />}
-              </button>
+              {/* View mode dropdown */}
+              {(() => {
+                const VIEW_OPTIONS = [
+                  { mode: 'list' as const,    label: 'Lista',    Icon: List },
+                  { mode: 'compact' as const, label: 'Compacto', Icon: LayoutList },
+                  { mode: 'guided' as const,  label: 'Guiado',   Icon: Maximize2 },
+                ];
+                const current = VIEW_OPTIONS.find((o) => o.mode === viewMode) ?? VIEW_OPTIONS[0];
+                return (
+                  <div className="relative">
+                    <button
+                      onClick={() => setViewDropdownOpen((o) => !o)}
+                      className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                    >
+                      <current.Icon size={15} />
+                    </button>
+                    {viewDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setViewDropdownOpen(false)} />
+                        <div className="absolute right-0 top-full mt-1 z-20 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden shadow-xl min-w-[110px]">
+                          {VIEW_OPTIONS.map(({ mode, label, Icon }) => (
+                            <button
+                              key={mode}
+                              onClick={() => { setViewMode(mode); setViewDropdownOpen(false); }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-gray-700 ${
+                                viewMode === mode ? 'bg-yellow-400/15 text-yellow-400 font-semibold' : 'text-gray-300'
+                              }`}
+                            >
+                              <Icon size={14} /> {label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
               <button
                 onClick={onBack}
                 className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
@@ -1149,6 +1324,15 @@ export function StrictTrainingPage({
               phase={phase}
               countdown={countdown}
               nextStepLabel={nextStepLabel}
+            />
+          </div>
+        ) : viewMode === 'compact' ? (
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+            <CompactView
+              exercises={exercises}
+              displayGroups={displayGroups}
+              highlightExerciseIndex={highlightExerciseIndex}
+              onScrollTo={scrollToExercise}
             />
           </div>
         ) : (
