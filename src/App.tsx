@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { useLocalStorage } from './hooks/useLocalStorage';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
@@ -54,7 +55,7 @@ export function App() {
   const autoplayAddFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
 
   // Shared aerobic workout state
-  const [aerobicWorkout, setAerobicWorkout] = useState<AerobicWorkout>({
+  const [aerobicWorkout, setAerobicWorkout] = useLocalStorage<AerobicWorkout>('nexur-aerobic-workout', {
     workoutName: 'Novo Treino Aerobico',
     workoutStartDate: '',
     workoutEndDate: '',

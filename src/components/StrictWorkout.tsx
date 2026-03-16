@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import IMask from 'imask';
 import { IMaskInput } from 'react-imask';
 import {
@@ -237,7 +238,8 @@ export function StrictWorkout({
   onExercisesChange?: (exercises: StrictExercise[]) => void;
   defaultExerciseType?: ExerciseType;
 }) {
-  const [exercises, setExercises] = useState<StrictExercise[]>([]);
+  const storageKey = defaultExerciseType === 'duration' ? 'nexur-autoplay-exercises' : 'nexur-strict-exercises';
+  const [exercises, setExercises] = useLocalStorage<StrictExercise[]>(storageKey, []);
   const [confirmAction, setConfirmAction] = useState<{
     message: string;
     onConfirm: () => void;
