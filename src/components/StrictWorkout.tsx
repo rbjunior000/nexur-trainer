@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import IMask from 'imask';
 import { IMaskInput } from 'react-imask';
@@ -98,6 +98,71 @@ const REST_PRESETS: { label: string; value: number }[] = [
   { label: '3min', value: 180 },
 ];
 const REST_PRESET_VALUES = new Set(REST_PRESETS.map((p) => p.value));
+
+// --- Color Bar ---
+const NEXUR_COLORS = [
+  '#f1f1f1',
+  '#E45A33',
+  '#FA761E',
+  '#EF486E',
+  '#4488FF',
+  '#FF44AA',
+  '#FDE84E',
+  '#9AC53E',
+  '#05D59E',
+  '#5BBFEA',
+  '#1089B1',
+  '#06394A',
+];
+
+function ColorBar({ color, onChange }: { color?: string; onChange: (hex: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.top, left: rect.right + 8 });
+    }
+    setOpen((v) => !v);
+  };
+
+  return (
+    <div className="flex-shrink-0 h-full">
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        title="Cor do exercício"
+        className="h-full w-2.5 rounded-lg cursor-pointer focus:outline-none"
+        style={{ background: color || '#e5e7eb' }}
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-40 bg-white rounded-xl shadow-xl border border-gray-100 p-2"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            <div className="grid grid-cols-4 gap-1.5">
+              {NEXUR_COLORS.map((hex) => (
+                <button
+                  key={hex}
+                  onClick={() => { onChange(hex); setOpen(false); }}
+                  className="w-7 h-7 rounded-lg border-2 transition-transform hover:scale-110 focus:outline-none"
+                  style={{
+                    background: hex,
+                    borderColor: color === hex ? '#374151' : 'transparent',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // --- Helpers ---
 let _idCounter = 100;
@@ -774,17 +839,23 @@ function ExerciseCard({
     <div className="flex flex-col gap-4 py-4 rounded-lg bg-white">
       {/* Title row – with inline thumbnail on mobile */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 md:hidden">
-          <MediaPreview media={exercise.media1} alt={exercise.name} />
+        <div className="flex gap-1 h-10 flex-shrink-0 md:hidden">
+          <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />
+          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
+            <MediaPreview media={exercise.media1} alt={exercise.name} />
+          </div>
         </div>
         <h3 className="text-sm font-bold text-gray-900 truncate">{exercise.name}</h3>
       </div>
 
       {/* Content: form only on mobile, thumbnail + form on md+ */}
       <div className="flex gap-4">
-        {/* Thumbnail – desktop only */}
-        <div className="hidden md:block w-36 h-36 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-          <MediaPreview media={exercise.media1} alt={exercise.name} />
+        {/* Thumbnail + color bar – desktop only */}
+        <div className="hidden md:flex gap-1 h-36 flex-shrink-0">
+          <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />
+          <div className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100">
+            <MediaPreview media={exercise.media1} alt={exercise.name} />
+          </div>
         </div>
 
         {/* Form fields */}

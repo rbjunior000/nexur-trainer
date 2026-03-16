@@ -45,6 +45,7 @@ export interface StrictExercise extends Exercise {
   restDuration?: number; // seconds (0 = OFF), used only when type='rest'
   notes: string;
   supersetWithNext: boolean;
+  cor?: string;
 }
 
 let _typeIdCounter = 0;

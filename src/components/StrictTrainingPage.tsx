@@ -45,6 +45,7 @@ interface TrainingExercise {
   supersetId?: string;
   isRest?: boolean;
   restDuration?: number;
+  cor?: string;
 }
 
 interface SupersetGroup {
@@ -85,6 +86,7 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     media2: ex.media2,
     type: ex.type,
     notes: ex.notes,
+    cor: ex.cor,
     supersetId,
     sets: ex.sets.map((s) => ({
       id: s.id,
@@ -389,8 +391,15 @@ function ExerciseCard({
     }
   })();
 
+  const corStyle = exercise.cor && exercise.cor !== '#f1f1f1'
+    ? { borderLeft: `4px solid ${exercise.cor}` }
+    : undefined;
+
   return (
-    <div className={`bg-gray-900 rounded-2xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/50' : ''}`}>
+    <div
+      className={`bg-gray-900 rounded-2xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/50' : ''}`}
+      style={corStyle}
+    >
       {/* Media carousel */}
       {(exercise.media1 || exercise.media2) && (
         <MediaCarousel items={[exercise.media1, exercise.media2]} alt={exercise.name} playable />
