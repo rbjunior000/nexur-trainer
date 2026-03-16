@@ -64,6 +64,8 @@ interface FocusStep {
   isSupersetRest?: boolean;
 }
 
+type Phase = 'work' | 'rest';
+
 // --- Conversion ---
 function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingExercise {
   if (ex.type === 'rest') {
@@ -260,8 +262,8 @@ function SetRow({
   exerciseType,
   isCurrent,
   showWeight,
-  restCountdown,
-  durationCountdown,
+  phase,
+  countdown,
   onToggle,
   onUpdateField,
 }: {
@@ -270,12 +272,12 @@ function SetRow({
   exerciseType: string;
   isCurrent: boolean;
   showWeight: boolean;
-  restCountdown: number | null;
-  durationCountdown: number | null;
+  phase: Phase;
+  countdown: number | null;
   onToggle: () => void;
   onUpdateField: (field: keyof TrainingSet, value: number | string) => void;
 }) {
-  const isCountingRest = isCurrent && set.completed && restCountdown !== null && restCountdown > 0;
+  const isCountingRest = isCurrent && set.completed && phase === 'rest' && countdown !== null && countdown > 0;
 
   return (
     <tr className={`border-b border-gray-800/50 transition-colors ${isCurrent ? 'bg-gray-800/60' : ''}`}>
@@ -317,8 +319,8 @@ function SetRow({
             </td>
           )}
           <td className="py-2.5 px-2">
-            {isCurrent && durationCountdown !== null
-              ? <span className="text-yellow-400 text-sm font-bold animate-pulse tabular-nums">{formatTime(durationCountdown)}</span>
+            {isCurrent && phase === 'work' && countdown !== null
+              ? <span className="text-yellow-400 text-sm font-bold animate-pulse tabular-nums">{formatTime(countdown)}</span>
               : <span className="text-white text-sm font-semibold">{set.duration || '00:00'}</span>
             }
           </td>
@@ -339,7 +341,7 @@ function SetRow({
       <td className="py-2.5 px-2">
         <span className={`flex items-center gap-1 text-sm ${isCountingRest ? 'text-yellow-400 animate-pulse font-bold' : 'text-gray-400'}`}>
           <Clock size={12} />
-          {isCountingRest ? formatTime(restCountdown!) : formatRest(set.rest)}
+          {isCountingRest ? formatTime(countdown!) : formatRest(set.rest)}
         </span>
       </td>
 
@@ -365,8 +367,8 @@ function ExerciseCard({
   exerciseIndex,
   currentExerciseIndex,
   currentSetIndex,
-  restCountdown,
-  durationCountdown,
+  phase,
+  countdown,
   onToggleSet,
   onUpdateSetField,
 }: {
@@ -374,8 +376,8 @@ function ExerciseCard({
   exerciseIndex: number;
   currentExerciseIndex: number;
   currentSetIndex: number;
-  restCountdown: number | null;
-  durationCountdown: number | null;
+  phase: Phase;
+  countdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
 }) {
@@ -439,8 +441,8 @@ function ExerciseCard({
                 exerciseType={exercise.type}
                 isCurrent={isCurrent && si === currentSetIndex}
                 showWeight={exercise.type !== 'duration' || hasWeight}
-                restCountdown={isCurrent && si === currentSetIndex ? restCountdown : null}
-                durationCountdown={isCurrent && si === currentSetIndex ? durationCountdown : null}
+                phase={phase}
+                countdown={isCurrent && si === currentSetIndex ? countdown : null}
                 onToggle={() => onToggleSet(exerciseIndex, si)}
                 onUpdateField={(field, value) => onUpdateSetField(exerciseIndex, si, field, value)}
               />
@@ -466,8 +468,8 @@ function SupersetCard({
   exerciseIndices,
   currentExerciseIndex,
   currentSetIndex,
-  restCountdown,
-  durationCountdown,
+  phase,
+  countdown,
   onToggleSet,
   onUpdateSetField,
   onExerciseRef,
@@ -477,8 +479,8 @@ function SupersetCard({
   exerciseIndices: number[];
   currentExerciseIndex: number;
   currentSetIndex: number;
-  restCountdown: number | null;
-  durationCountdown: number | null;
+  phase: Phase;
+  countdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
   onExerciseRef: (exIdx: number, el: HTMLDivElement | null) => void;
@@ -512,8 +514,8 @@ function SupersetCard({
                 exerciseIndex={exIdx}
                 currentExerciseIndex={currentExerciseIndex}
                 currentSetIndex={currentSetIndex}
-                restCountdown={restCountdown}
-                durationCountdown={durationCountdown}
+                phase={phase}
+                countdown={countdown}
                 onToggleSet={onToggleSet}
                 onUpdateSetField={onUpdateSetField}
               />
@@ -624,23 +626,17 @@ function GuidedView({
   supersets,
   focusSteps,
   currentStepIdx,
-  restCountdown,
-  isResting,
-  isOnRestStep,
+  phase,
+  countdown,
   nextStepLabel,
-  isDurationCounting,
-  durationCountdown,
 }: {
   exercises: TrainingExercise[];
   supersets: SupersetGroup[];
   focusSteps: FocusStep[];
   currentStepIdx: number;
-  restCountdown: number | null;
-  isResting: boolean;
-  isOnRestStep: boolean;
+  phase: Phase;
+  countdown: number | null;
   nextStepLabel: string;
-  isDurationCounting: boolean;
-  durationCountdown: number | null;
 }) {
   const currentStep = focusSteps[currentStepIdx];
   if (!currentStep) return null;
@@ -656,14 +652,14 @@ function GuidedView({
   const totalSets = currentExercise?.sets.length ?? 0;
 
   // Duration countdown screen
-  if (isDurationCounting) {
+  if (phase === 'work' && countdown !== null) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-6 py-8">
         <div className="w-24 h-24 rounded-full bg-yellow-400/10 flex items-center justify-center">
           <Clock size={40} className="text-yellow-400" />
         </div>
         <p className="text-gray-400 text-lg font-semibold uppercase tracking-widest">Duração</p>
-        <p className="text-7xl font-bold text-white tabular-nums">{formatTime(durationCountdown ?? 0)}</p>
+        <p className="text-7xl font-bold text-white tabular-nums">{formatTime(countdown)}</p>
         {currentExercise && (
           <p className="text-gray-500 text-sm font-medium">{currentExercise.name}</p>
         )}
@@ -672,8 +668,8 @@ function GuidedView({
   }
 
   // Rest screen
-  if (isResting || isOnRestStep) {
-    const countdown = restCountdown ?? currentStep.restStepDuration ?? 0;
+  if (phase === 'rest') {
+    const restDisplay = countdown ?? currentStep.restStepDuration ?? 0;
     const isSupersetRest = currentStep.isSupersetRest === true;
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-6 py-8">
@@ -686,7 +682,7 @@ function GuidedView({
           </span>
         )}
         <p className="text-gray-400 text-lg font-semibold uppercase tracking-widest">Descanso</p>
-        <p className="text-7xl font-bold text-white tabular-nums">{formatTime(countdown)}</p>
+        <p className="text-7xl font-bold text-white tabular-nums">{formatTime(restDisplay)}</p>
         {nextStepLabel && (
           <p className="text-gray-500 text-sm">A seguir: {nextStepLabel}</p>
         )}
@@ -824,18 +820,22 @@ export function StrictTrainingPage({
   const [completedSetIds, setCompletedSetIds] = useState<Set<string>>(new Set());
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
-  const [restCountdown, setRestCountdown] = useState<number | null>(null);
-  const [durationCountdown, setDurationCountdown] = useState<number | null>(null);
+  const [phase, setPhase] = useState<Phase>('work');
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'guided'>('list');
 
-  const isResting = restCountdown !== null && restCountdown > 0;
-  const isDurationCounting = durationCountdown !== null && durationCountdown > 0;
+  const isResting = phase === 'rest';
+  const isWorkCountdown = phase === 'work' && countdown !== null;
 
   // Refs
   const cardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
   const exerciseCardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const exercisesRef = useRef(exercises);
+  exercisesRef.current = exercises;
+  const focusStepsRef = useRef(focusSteps);
+  focusStepsRef.current = focusSteps;
   const stateRef = useRef({ currentStepIdx, focusSteps });
   stateRef.current = { currentStepIdx, focusSteps };
 
@@ -852,38 +852,31 @@ export function StrictTrainingPage({
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // Rest countdown timer
+  // Effect A — Single countdown ticker
   useEffect(() => {
-    if (!isRunning || restCountdown === null || restCountdown <= 0) return;
-    const id = setInterval(() => {
-      setRestCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : null));
-    }, 1000);
+    if (!isRunning || countdown === null || countdown <= 0) return;
+    const id = setInterval(() => setCountdown((p) => (p !== null && p > 0 ? p - 1 : 0)), 1000);
     return () => clearInterval(id);
-  }, [isRunning, restCountdown]);
+  }, [isRunning, countdown]);
 
-  // Duration countdown timer
+  // Effect B — Step entry: set phase and countdown based on what the step requires
   useEffect(() => {
-    if (!isRunning || durationCountdown === null || durationCountdown <= 0) return;
-    const id = setInterval(() => {
-      setDurationCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isRunning, durationCountdown]);
-
-  // Auto-start rest on rest steps
-  useEffect(() => {
-    const step = focusSteps[currentStepIdx];
-    if (step?.isRestStep && step.restStepDuration && step.restStepDuration > 0) {
-      setRestCountdown(step.restStepDuration);
+    const step = focusStepsRef.current[currentStepIdx];
+    if (!step) return;
+    if (step.isRestStep && step.restStepDuration) {
+      setPhase('rest');
+      setCountdown(step.restStepDuration);
+      return;
     }
-  }, [currentStepIdx, focusSteps]);
-
-  // Auto-advance when rest reaches 0
-  useEffect(() => {
-    if (restCountdown === 0) {
-      advanceStep();
+    setPhase('work');
+    const ex = exercisesRef.current[step.exerciseIndex];
+    if (ex?.type === 'duration') {
+      const secs = parseDurationToSeconds(ex.sets[step.setIndex]?.duration || '');
+      setCountdown(secs > 0 ? secs : null);
+    } else {
+      setCountdown(null);
     }
-  }, [restCountdown]);
+  }, [currentStepIdx]);
 
   // Scroll to the card containing a given exercise index
   const scrollToExercise = useCallback((exerciseIndex: number) => {
@@ -907,10 +900,10 @@ export function StrictTrainingPage({
     }
   }, [displayGroups]);
 
-  // Advance to next step
-  const advanceStep = useCallback(() => {
+  // Go to next step
+  const goNextStep = useCallback(() => {
     const { currentStepIdx: idx, focusSteps: steps } = stateRef.current;
-    setRestCountdown(null);
+    setCountdown(null);
     if (idx >= steps.length - 1) {
       setIsRunning(false);
       setShowSummary(true);
@@ -924,10 +917,10 @@ export function StrictTrainingPage({
     }
   }, [scrollToExercise]);
 
-  // Complete current set and start rest or advance (used for duration auto-complete)
-  const completeCurrentSet = useCallback(() => {
+  // Complete current set and start rest or advance
+  const completeStep = useCallback(() => {
     if (!currentSet || !currentStep) return;
-    setDurationCountdown(null);
+    setCountdown(null);
     setCompletedSetIds((prev) => {
       const next = new Set(prev);
       next.add(currentSet.id);
@@ -942,88 +935,41 @@ export function StrictTrainingPage({
     );
     const rest = currentStep.restAfterStep;
     if (rest > 0 && currentStepIdx < focusSteps.length - 1) {
-      setRestCountdown(rest);
+      setPhase('rest');
+      setCountdown(rest);
     } else {
-      advanceStep();
+      goNextStep();
     }
-  }, [currentSet, currentStep, currentStepIdx, focusSteps.length, advanceStep]);
+  }, [currentSet, currentStep, currentStepIdx, focusSteps.length, goNextStep]);
 
-  // Auto-complete duration set when countdown reaches 0
-  const completeCurrentSetRef = useRef(completeCurrentSet);
-  completeCurrentSetRef.current = completeCurrentSet;
+  // Refs for stable closure access in Effect C
+  const goNextStepRef = useRef(goNextStep);
+  goNextStepRef.current = goNextStep;
+  const completeStepRef = useRef(completeStep);
+  completeStepRef.current = completeStep;
+
+  // Effect C — Auto-advance when countdown reaches 0
   useEffect(() => {
-    if (durationCountdown === 0) {
-      completeCurrentSetRef.current();
-    }
-  }, [durationCountdown]);
+    if (countdown === null || countdown > 0) return;
+    if (phase === 'rest') goNextStepRef.current();
+    else completeStepRef.current();
+  }, [phase, countdown]);
 
   // --- Footer Next handler ---
   const handleNext = useCallback(() => {
-    if (isResting) {
-      // Skip rest → advance
-      advanceStep();
-      return;
-    }
-
-    if (isOnRestStep) {
-      // Skip rest step
-      advanceStep();
-      return;
-    }
-
-    if (isDurationCounting) {
-      // Skip duration countdown → complete set
-      completeCurrentSet();
-      return;
-    }
-
-    if (!currentSet || !currentStep) return;
-
-    // Duration type: start countdown instead of completing immediately
-    if (currentExercise?.type === 'duration') {
-      const secs = parseDurationToSeconds(currentSet.duration || '');
-      if (secs > 0) {
-        setDurationCountdown(secs);
-        return;
-      }
-    }
-
-    // Mark set completed
-    setCompletedSetIds((prev) => {
-      const next = new Set(prev);
-      next.add(currentSet.id);
-      return next;
-    });
-    setExercises((prev) =>
-      prev.map((e, ei) =>
-        ei === currentStep.exerciseIndex
-          ? {
-              ...e,
-              sets: e.sets.map((s, si) =>
-                si === currentStep.setIndex ? { ...s, completed: true } : s
-              ),
-            }
-          : e
-      )
-    );
-
-    // Start rest or advance
-    const rest = currentStep.restAfterStep;
-    if (rest > 0 && currentStepIdx < focusSteps.length - 1) {
-      setRestCountdown(rest);
-    } else {
-      advanceStep();
-    }
-  }, [isResting, isOnRestStep, isDurationCounting, currentSet, currentStep, currentExercise, currentStepIdx, focusSteps.length, advanceStep, completeCurrentSet]);
+    if (phase === 'rest') { goNextStep(); return; }
+    completeStep();
+  }, [phase, goNextStep, completeStep]);
 
   // --- Footer Prev handler ---
   const handlePrev = useCallback(() => {
     if (isResting) {
-      setRestCountdown(null);
+      setCountdown(null);
+      setPhase('work');
       return;
     }
     if (currentStepIdx > 0) {
-      setRestCountdown(null);
+      setCountdown(null);
       const prevIdx = currentStepIdx - 1;
       setCurrentStepIdx(prevIdx);
       const prevStep = focusSteps[prevIdx];
@@ -1104,21 +1050,17 @@ export function StrictTrainingPage({
 
   // Step info label for footer
   const stepInfoLabel = useMemo(() => {
-    if (isDurationCounting) {
-      return `${currentExercise?.name ?? ''} — ${formatTime(durationCountdown ?? 0)}`;
+    if (phase === 'rest' && countdown !== null) {
+      return `Descanso — ${formatTime(countdown)}`;
     }
-    if (isResting) {
-      const label = currentStep?.isSupersetRest ? 'Descanso entre exercícios' : 'Descanso';
-      return `${label} — ${formatTime(restCountdown ?? 0)}`;
-    }
-    if (isOnRestStep) {
-      return `Descanso — ${formatTime(restCountdown ?? currentStep?.restStepDuration ?? 0)}`;
+    if (isWorkCountdown) {
+      return `${currentExercise?.name ?? ''} — ${formatTime(countdown!)}`;
     }
     if (currentExercise && currentStep) {
       return `${currentExercise.name} — Série ${currentStep.setIndex + 1}/${currentExercise.sets.length}`;
     }
     return '';
-  }, [isDurationCounting, isResting, isOnRestStep, durationCountdown, restCountdown, currentStep, currentExercise]);
+  }, [phase, countdown, isWorkCountdown, currentStep, currentExercise]);
 
   // Next step preview label
   const nextStepLabel = useMemo(() => {
@@ -1140,11 +1082,10 @@ export function StrictTrainingPage({
 
   // What the Next button should say
   const nextButtonLabel = useMemo(() => {
-    if (isResting || isOnRestStep || isDurationCounting) return 'Pular';
+    if (phase === 'rest') return 'Pular Descanso';
     if (currentStepIdx >= focusSteps.length - 1) return 'Finalizar';
-    if (currentExercise?.type === 'duration') return 'Iniciar';
     return 'Próximo';
-  }, [isResting, isOnRestStep, isDurationCounting, currentStepIdx, focusSteps.length, currentExercise]);
+  }, [phase, currentStepIdx, focusSteps.length]);
 
   const hasPrev = currentStepIdx > 0;
   const hasNext = currentStepIdx < focusSteps.length;
@@ -1180,7 +1121,7 @@ export function StrictTrainingPage({
           {/* Step info bar */}
           <div className="px-4 py-2 border-b border-gray-800/50">
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-semibold truncate ${isResting || isOnRestStep || isDurationCounting ? 'text-yellow-400' : 'text-white'}`}>
+              <span className={`text-sm font-semibold truncate ${isResting || isWorkCountdown ? 'text-yellow-400' : 'text-white'}`}>
                 {stepInfoLabel}
               </span>
               <span className="text-xs text-gray-500 font-medium tabular-nums ml-2 flex-shrink-0">
@@ -1205,12 +1146,9 @@ export function StrictTrainingPage({
               supersets={supersets}
               focusSteps={focusSteps}
               currentStepIdx={currentStepIdx}
-              restCountdown={restCountdown}
-              isResting={isResting}
-              isOnRestStep={isOnRestStep}
+              phase={phase}
+              countdown={countdown}
               nextStepLabel={nextStepLabel}
-              isDurationCounting={isDurationCounting}
-              durationCountdown={durationCountdown}
             />
           </div>
         ) : (
@@ -1222,13 +1160,13 @@ export function StrictTrainingPage({
                 };
 
                 if (group.type === 'rest') {
-                  const isActiveRest = isOnRestStep && currentStep?.exerciseIndex === group.exerciseIndex;
+                  const isActiveRest = isResting && isOnRestStep && currentStep?.exerciseIndex === group.exerciseIndex;
                   return (
                     <div key={`rest-${group.exerciseIndex}`} ref={ref}>
                       <RestBlockCard
                         exercise={exercises[group.exerciseIndex]}
                         isActive={isActiveRest}
-                        countdown={isActiveRest ? restCountdown : null}
+                        countdown={isActiveRest ? countdown : null}
                       />
                     </div>
                   );
@@ -1243,8 +1181,8 @@ export function StrictTrainingPage({
                         exerciseIndices={group.exerciseIndices}
                         currentExerciseIndex={highlightExerciseIndex}
                         currentSetIndex={highlightSetIndex}
-                        restCountdown={isResting ? restCountdown : null}
-                        durationCountdown={isDurationCounting ? durationCountdown : null}
+                        phase={phase}
+                        countdown={countdown}
                         onToggleSet={handleToggleSet}
                         onUpdateSetField={handleUpdateSetField}
                         onExerciseRef={(exIdx, el) => exerciseCardRefs.current.set(exIdx, el)}
@@ -1260,8 +1198,8 @@ export function StrictTrainingPage({
                       exerciseIndex={group.exerciseIndex}
                       currentExerciseIndex={highlightExerciseIndex}
                       currentSetIndex={highlightSetIndex}
-                      restCountdown={isResting ? restCountdown : null}
-                      durationCountdown={isDurationCounting ? durationCountdown : null}
+                      phase={phase}
+                      countdown={countdown}
                       onToggleSet={handleToggleSet}
                       onUpdateSetField={handleUpdateSetField}
                     />
