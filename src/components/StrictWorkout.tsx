@@ -299,40 +299,52 @@ function isInSuperset(exercises: StrictExercise[], index: number): boolean {
 }
 
 // --- Fill Modal ---
-type FillField<T> = { enabled: boolean; value: T };
-type SetTemplate = {
-  weight?: number;
-  reps?: number;
-  repsMin?: number;
-  repsMax?: number;
-  duration?: string;
-  distance?: number;
-  rest: number;
-};
 type FillForm = {
-  type: FillField<ExerciseType>;
-  repsMode: FillField<'fixed' | 'range'>;
-  numSets: FillField<number>;
-  setTemplate: FillField<SetTemplate>;
-  notes: FillField<string>;
+  type: ExerciseType | null;
+  numSets: number | null;
+  repsMode: 'fixed' | 'range' | null;
+  weight: number | null;
+  reps: number | null;
+  repsMin: number | null;
+  repsMax: number | null;
+  duration: string | null;
+  distance: number | null;
+  rest: number | null;
+  notes: string | null;
 };
+
+const INPUT_CLS = 'w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400';
 
 function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; onClose: () => void }) {
-  const [form, setForm] = useState<FillForm>({
-    type: { enabled: false, value: 'weight_reps' },
-    repsMode: { enabled: false, value: 'fixed' },
-    numSets: { enabled: false, value: 3 },
-    setTemplate: { enabled: false, value: { rest: 60 } },
-    notes: { enabled: false, value: '' },
-  });
+  const [type, setType] = useState<ExerciseType | null>(null);
+  const [numSets, setNumSets] = useState<number | null>(null);
+  const [repsMode, setRepsMode] = useState<'fixed' | 'range' | null>(null);
+  const [weight, setWeight] = useState<number | null>(null);
+  const [reps, setReps] = useState<number | null>(null);
+  const [repsMin, setRepsMin] = useState<number | null>(null);
+  const [repsMax, setRepsMax] = useState<number | null>(null);
+  const [durationEnabled, setDurationEnabled] = useState(false);
+  const [duration, setDuration] = useState('00:00:30');
+  const [distance, setDistance] = useState<number | null>(null);
+  const [rest, setRest] = useState<number | null>(null);
+  const [notes, setNotes] = useState('');
 
-  const setField = <K extends keyof FillForm>(key: K, updates: Partial<FillForm[K]>) => {
-    setForm((prev) => ({ ...prev, [key]: { ...prev[key], ...updates } }));
+  const handleApply = () => {
+    onApply({ type, numSets, repsMode, weight, reps, repsMin, repsMax, duration: durationEnabled ? duration : null, distance, rest, notes: notes !== '' ? notes : null });
   };
 
-  const effectiveType = form.type.enabled ? form.type.value : 'weight_reps';
-  const hasReps = effectiveType === 'weight_reps';
-  const isRange = form.repsMode.value === 'range';
+  const toggleType = (t: ExerciseType) => setType((prev) => prev === t ? null : t);
+  const toggleRepsMode = (m: 'fixed' | 'range') => setRepsMode((prev) => prev === m ? null : m);
+
+  const numInput = (val: number | null, onChange: (v: number | null) => void, placeholder: string) => (
+    <input
+      type="number" min={0}
+      value={val ?? ''}
+      onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+      placeholder={placeholder}
+      className={INPUT_CLS}
+    />
+  );
 
   return (
     <motion.div
@@ -345,7 +357,7 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl max-h-[90vh] flex flex-col"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-bold text-gray-900">Preencher em massa</h3>
@@ -354,129 +366,113 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
           {/* Tipo */}
-          <section>
-            <label className="flex items-center gap-2 mb-2 cursor-pointer">
-              <input type="checkbox" checked={form.type.enabled} onChange={(e) => setField('type', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Tipo de exercício</span>
-            </label>
-            {form.type.enabled && (
-              <div className="flex gap-2 flex-wrap pl-6">
-                {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setField('type', { value: t })}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${form.type.value === t ? `${TYPE_CONFIG[t].bgColor} ${TYPE_CONFIG[t].textColor}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                  >
-                    {TYPE_CONFIG[t].label}
-                  </button>
-                ))}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Tipo de exercício</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => toggleType(t)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${type === t ? `${TYPE_CONFIG[t].bgColor} ${TYPE_CONFIG[t].textColor}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {TYPE_CONFIG[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Séries + Reps mode */}
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Séries</label>
+              <input
+                type="number" min={1} max={10}
+                value={numSets ?? ''}
+                onChange={(e) => setNumSets(e.target.value === '' ? null : Math.min(10, Math.max(1, Number(e.target.value))))}
+                placeholder="3"
+                className="w-16 text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
+            <div className="flex gap-1.5 pb-0.5">
+              <button
+                onClick={() => toggleRepsMode('fixed')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${repsMode === 'fixed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              >
+                Reps
+              </button>
+              <button
+                onClick={() => toggleRepsMode('range')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${repsMode === 'range' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              >
+                Faixa
+              </button>
+            </div>
+          </div>
+
+          {/* Campos de série */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Carga (kg)</label>
+              {numInput(weight, setWeight, '0 kg')}
+            </div>
+
+            {repsMode !== 'range' ? (
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Reps</label>
+                {numInput(reps, setReps, '12')}
               </div>
-            )}
-          </section>
-
-          {/* Modo de reps */}
-          {hasReps && (
-            <section>
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input type="checkbox" checked={form.repsMode.enabled} onChange={(e) => setField('repsMode', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
-                <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Modo de reps</span>
-              </label>
-              {form.repsMode.enabled && (
-                <div className="flex gap-2 pl-6">
-                  <button onClick={() => setField('repsMode', { value: 'fixed' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.repsMode.value === 'fixed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Reps fixas</button>
-                  <button onClick={() => setField('repsMode', { value: 'range' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.repsMode.value === 'range' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Faixa</button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Número de séries */}
-          <section>
-            <label className="flex items-center gap-2 mb-2 cursor-pointer">
-              <input type="checkbox" checked={form.numSets.enabled} onChange={(e) => setField('numSets', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Número de séries</span>
-            </label>
-            {form.numSets.enabled && (
-              <div className="pl-6">
-                <input
-                  type="number" min={1} max={10}
-                  value={form.numSets.value}
-                  onChange={(e) => setField('numSets', { value: Math.min(10, Math.max(1, Number(e.target.value) || 1)) })}
-                  className="w-20 text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
-                />
-              </div>
-            )}
-          </section>
-
-          {/* Valores das séries */}
-          <section>
-            <label className="flex items-center gap-2 mb-2 cursor-pointer">
-              <input type="checkbox" checked={form.setTemplate.enabled} onChange={(e) => setField('setTemplate', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Valores das séries</span>
-            </label>
-            {form.setTemplate.enabled && (
-              <div className="pl-6 grid grid-cols-2 gap-2">
-                {effectiveType !== 'distance' && (
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Carga (kg)</label>
-                    <input type="number" min={0} value={form.setTemplate.value.weight ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, weight: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                  </div>
-                )}
-                {hasReps && !isRange && (
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps</label>
-                    <input type="number" min={0} value={form.setTemplate.value.reps ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, reps: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                  </div>
-                )}
-                {hasReps && isRange && (
-                  <>
-                    <div>
-                      <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps mín</label>
-                      <input type="number" min={0} value={form.setTemplate.value.repsMin ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, repsMin: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps máx</label>
-                      <input type="number" min={0} value={form.setTemplate.value.repsMax ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, repsMax: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                    </div>
-                  </>
-                )}
-                {effectiveType === 'duration' && (
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Duração</label>
-                    <DurationInput value={form.setTemplate.value.duration || '00:00:30'} onChange={(val) => setField('setTemplate', { value: { ...form.setTemplate.value, duration: val } })} className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                  </div>
-                )}
-                {effectiveType === 'distance' && (
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Distância (km)</label>
-                    <input type="number" min={0} value={form.setTemplate.value.distance ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, distance: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
-                  </div>
-                )}
+            ) : (
+              <>
                 <div>
-                  <label className="text-[10px] text-gray-400 uppercase mb-1 block">Descanso (seg)</label>
-                  <input type="number" min={0} value={form.setTemplate.value.rest} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, rest: Number(e.target.value) || 0 } })} placeholder="60" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Reps mín</label>
+                  {numInput(repsMin, setRepsMin, '8')}
                 </div>
-              </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Reps máx</label>
+                  {numInput(repsMax, setRepsMax, '12')}
+                </div>
+              </>
             )}
-          </section>
+
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Duração</label>
+              {durationEnabled ? (
+                <DurationInput value={duration} onChange={setDuration} className={INPUT_CLS} />
+              ) : (
+                <button onClick={() => setDurationEnabled(true)} className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm text-gray-400 hover:border-yellow-400 hover:text-gray-600 transition-colors">
+                  00:00:30
+                </button>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Distância (km)</label>
+              {numInput(distance, setDistance, '0 km')}
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Descanso (seg)</label>
+              {numInput(rest, setRest, '60s')}
+            </div>
+          </div>
 
           {/* Observações */}
-          <section>
-            <label className="flex items-center gap-2 mb-2 cursor-pointer">
-              <input type="checkbox" checked={form.notes.enabled} onChange={(e) => setField('notes', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Observações</span>
-            </label>
-            {form.notes.enabled && (
-              <textarea value={form.notes.value} onChange={(e) => setField('notes', { value: e.target.value })} placeholder="Notas para todos os exercícios selecionados..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 resize-none h-16 ml-6" style={{ width: 'calc(100% - 1.5rem)' }} />
-            )}
-          </section>
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Observações</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Adicionar observação..."
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 resize-none h-16"
+            />
+          </div>
         </div>
 
         <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
-          <button onClick={() => onApply(form)} className="flex-1 py-2.5 text-sm font-bold text-white bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors">Aplicar</button>
+          <button onClick={handleApply} className="flex-1 py-2.5 text-sm font-bold text-white bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors">Aplicar</button>
         </div>
       </motion.div>
     </motion.div>
@@ -598,50 +594,43 @@ export function StrictWorkout({
       prev.map((ex) => {
         if (!selectedIds.has(ex.id)) return ex;
         let updated = { ...ex };
-        if (form.type.enabled) {
-          updated = { ...updated, type: form.type.value, sets: [] };
-        }
-        const effectiveType = form.type.enabled ? form.type.value : ex.type;
-        const effectiveRepsMode = form.repsMode.enabled ? form.repsMode.value : ex.repsMode;
-        if (form.repsMode.enabled && effectiveType === 'weight_reps') {
-          updated = { ...updated, repsMode: form.repsMode.value };
-        }
-        if (form.numSets.enabled && form.setTemplate.enabled) {
-          const count = form.numSets.value;
-          const tmpl = form.setTemplate.value;
-          const newSets: StrictSet[] = [];
-          for (let i = 0; i < count; i++) {
-            const set: StrictSet = { id: uid(), rest: tmpl.rest ?? 60 };
-            if (effectiveType !== 'distance') set.weight = tmpl.weight ?? 0;
-            if (effectiveType === 'weight_reps') {
-              if (effectiveRepsMode === 'range') {
-                set.repsRange = [tmpl.repsMin ?? 0, tmpl.repsMax ?? 0];
-              } else {
-                set.reps = tmpl.reps ?? 0;
-              }
+
+        if (form.type !== null) updated = { ...updated, type: form.type };
+        if (form.repsMode !== null) updated = { ...updated, repsMode: form.repsMode };
+
+        const effectiveRepsMode = form.repsMode ?? ex.repsMode;
+
+        const applyToSet = (s: StrictSet): StrictSet => {
+          const ns = { ...s };
+          if (form.weight !== null) ns.weight = form.weight;
+          if (form.rest !== null) ns.rest = form.rest;
+          if (form.duration !== null) ns.duration = form.duration;
+          if (form.distance !== null) ns.distance = form.distance;
+          if (effectiveRepsMode === 'range') {
+            if (form.repsMin !== null || form.repsMax !== null) {
+              ns.repsRange = [form.repsMin ?? s.repsRange?.[0] ?? 0, form.repsMax ?? s.repsRange?.[1] ?? 0];
             }
-            if (effectiveType === 'duration') set.duration = tmpl.duration ?? '00:00:30';
-            if (effectiveType === 'distance') set.distance = tmpl.distance ?? 0;
-            newSets.push(set);
+          } else {
+            if (form.reps !== null) ns.reps = form.reps;
           }
-          updated = { ...updated, sets: newSets };
-        } else if (form.numSets.enabled) {
-          const count = form.numSets.value;
-          const currentSets = updated.sets;
-          if (currentSets.length < count) {
-            const extra: StrictSet[] = [];
-            for (let i = currentSets.length; i < count; i++) {
-              const lastSet = currentSets[currentSets.length - 1];
-              extra.push(lastSet ? { ...lastSet, id: uid() } : { id: uid(), rest: 60 });
-            }
-            updated = { ...updated, sets: [...currentSets, ...extra] };
-          } else if (currentSets.length > count) {
-            updated = { ...updated, sets: currentSets.slice(0, count) };
-          }
+          return ns;
+        };
+
+        if (form.numSets !== null) {
+          const base = updated.sets;
+          updated = {
+            ...updated,
+            sets: Array.from({ length: form.numSets }, (_, i) => {
+              const src = base[i] ?? base[base.length - 1] ?? { id: uid(), rest: 60 };
+              return applyToSet({ ...src, id: uid() });
+            }),
+          };
+        } else {
+          updated = { ...updated, sets: updated.sets.map(applyToSet) };
         }
-        if (form.notes.enabled) {
-          updated = { ...updated, notes: form.notes.value };
-        }
+
+        if (form.notes !== null) updated = { ...updated, notes: form.notes };
+
         return updated;
       })
     );
