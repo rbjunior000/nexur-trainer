@@ -29,6 +29,7 @@ import { formatTime, formatElapsed, parseDurationToSeconds } from '../utils/form
 interface TrainingSet {
   id: string;
   reps?: number;
+  repsRange?: [number, number];
   weight?: number;
   duration?: string;
   distance?: number;
@@ -42,6 +43,7 @@ interface TrainingExercise {
   media1: Media | null;
   media2: Media | null;
   type: string;
+  repsMode?: string;
   sets: TrainingSet[];
   notes: string;
   supersetId?: string;
@@ -90,12 +92,14 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     media1: ex.media1,
     media2: ex.media2,
     type: ex.type,
+    repsMode: ex.repsMode,
     notes: ex.notes,
     cor: ex.cor,
     supersetId,
     sets: ex.sets.map((s) => ({
       id: s.id,
-      reps: s.reps,
+      reps: ex.repsMode === 'range' ? undefined : s.reps,
+      repsRange: s.repsRange,
       weight: s.weight,
       duration: s.duration,
       distance: s.distance,
@@ -264,6 +268,7 @@ function SetRow({
   set,
   setIndex,
   exerciseType,
+  repsMode,
   isCurrent,
   showWeight,
   phase,
@@ -274,6 +279,7 @@ function SetRow({
   set: TrainingSet;
   setIndex: number;
   exerciseType: string;
+  repsMode?: string;
   isCurrent: boolean;
   showWeight: boolean;
   phase: Phase;
@@ -297,12 +303,22 @@ function SetRow({
             />
           </td>
           <td className="py-2.5 px-2">
-            <input
-              type="number"
-              value={set.reps ?? 0}
-              onChange={(e) => onUpdateField('reps', Number(e.target.value) || 0)}
-              className="w-14 bg-gray-800 text-white text-sm font-semibold rounded-lg px-2 py-1 text-center border border-gray-700 focus:border-yellow-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
+            {repsMode === 'range' ? (
+              <input
+                type="number"
+                value={set.reps ?? ''}
+                placeholder={set.repsRange ? `${set.repsRange[0]}-${set.repsRange[1]}` : 'reps'}
+                onChange={(e) => onUpdateField('reps', Number(e.target.value) || 0)}
+                className="w-14 bg-gray-800 text-white text-sm font-semibold rounded-lg px-2 py-1 text-center border border-gray-700 focus:border-yellow-400 focus:outline-none placeholder:text-gray-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            ) : (
+              <input
+                type="number"
+                value={set.reps ?? 0}
+                onChange={(e) => onUpdateField('reps', Number(e.target.value) || 0)}
+                className="w-14 bg-gray-800 text-white text-sm font-semibold rounded-lg px-2 py-1 text-center border border-gray-700 focus:border-yellow-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            )}
           </td>
         </>
       )}
@@ -435,6 +451,7 @@ function ExerciseCard({
                 set={set}
                 setIndex={si}
                 exerciseType={exercise.type}
+                repsMode={exercise.repsMode}
                 isCurrent={isCurrent && si === currentSetIndex}
                 showWeight={exercise.type !== 'duration' || hasWeight}
                 phase={phase}
@@ -551,9 +568,11 @@ function summarizeSets(exercise: TrainingExercise): string {
   if (count === 0) return '';
   const first = exercise.sets[0];
   if (exercise.type === 'weight_reps') {
-    const reps = first.reps ?? 0;
+    const repsLabel = exercise.repsMode === 'range' && first.repsRange
+      ? `${first.repsRange[0]}-${first.repsRange[1]}`
+      : String(first.reps ?? 0);
     const weight = first.weight ?? 0;
-    return weight > 0 ? `${count}x${reps} — ${weight}kg` : `${count}x${reps}`;
+    return weight > 0 ? `${count}x${repsLabel} — ${weight}kg` : `${count}x${repsLabel}`;
   }
   if (exercise.type === 'duration') {
     return `${count}x ${first.duration || '00:00'}`;
@@ -565,63 +584,163 @@ function summarizeSets(exercise: TrainingExercise): string {
   return `${count} séries`;
 }
 
+function setLabel(set: TrainingSet, type: string, repsMode?: string): string {
+  if (type === 'weight_reps') {
+    const repsLabel = repsMode === 'range' && set.repsRange
+      ? `${set.repsRange[0]}-${set.repsRange[1]}`
+      : String(set.reps ?? 0);
+    const weight = set.weight ?? 0;
+    return weight > 0 ? `${repsLabel} reps — ${weight}kg` : `${repsLabel} reps`;
+  }
+  if (type === 'duration') return set.duration || '00:00';
+  if (type === 'distance') return `${set.distance ?? 0}m`;
+  return '';
+}
+
+function CompactEditModal({
+  exercise,
+  exerciseIndex,
+  onUpdateSetField,
+  onToggleSet,
+  onClose,
+}: {
+  exercise: TrainingExercise;
+  exerciseIndex: number;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onToggleSet: (exerciseIndex: number, setIndex: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-gray-900 rounded-t-2xl p-5 pb-8 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold text-base truncate pr-4">{exercise.name}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white flex-shrink-0">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {exercise.sets.map((set, si) => (
+            <div key={set.id} className="bg-gray-800 rounded-xl px-4 py-3 flex items-center gap-3">
+              {exercise.type === 'weight_reps' && (
+                <>
+                  <div className="flex-1">
+                    <p className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Carga</p>
+                    <input
+                      type="number"
+                      value={set.weight ?? 0}
+                      onChange={(e) => onUpdateSetField(exerciseIndex, si, 'weight', Number(e.target.value) || 0)}
+                      className="w-full bg-transparent text-white font-semibold text-sm text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none border-b border-gray-700 focus:border-yellow-400"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Reps</p>
+                    <input
+                      type="number"
+                      value={set.reps ?? ''}
+                      placeholder={exercise.repsMode === 'range' && set.repsRange ? `${set.repsRange[0]}-${set.repsRange[1]}` : '0'}
+                      onChange={(e) => onUpdateSetField(exerciseIndex, si, 'reps', Number(e.target.value) || 0)}
+                      className="w-full bg-transparent text-yellow-400 font-semibold text-sm text-center focus:outline-none placeholder:text-gray-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none border-b border-gray-700 focus:border-yellow-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              {exercise.type === 'duration' && (
+                <div className="flex-1">
+                  <p className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Duração</p>
+                  <p className="text-yellow-400 font-semibold text-sm text-center">{set.duration || '00:00'}</p>
+                </div>
+              )}
+
+              {exercise.type === 'distance' && (
+                <div className="flex-1">
+                  <p className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Distância</p>
+                  <input
+                    type="number"
+                    value={set.distance ?? 0}
+                    onChange={(e) => onUpdateSetField(exerciseIndex, si, 'distance', Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-yellow-400 font-semibold text-sm text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none border-b border-gray-700 focus:border-yellow-400"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={() => onToggleSet(exerciseIndex, si)}
+                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  set.completed
+                    ? 'bg-green-500 border-green-500 text-white'
+                    : 'border-gray-600 text-gray-500 hover:border-gray-400'
+                }`}
+              >
+                {set.completed
+                  ? <Check size={14} strokeWidth={3} />
+                  : <span className="text-[11px] font-bold tabular-nums">{si + 1}</span>
+                }
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CompactExerciseRow({
   exercise,
   exerciseIndex,
   isCurrent,
   onTap,
+  onEdit,
 }: {
   exercise: TrainingExercise;
   exerciseIndex: number;
   isCurrent: boolean;
   onTap?: (idx: number) => void;
+  onEdit?: (idx: number) => void;
 }) {
-  const completedCount = exercise.sets.filter((s) => s.completed).length;
-  const total = exercise.sets.length;
-  const allDone = completedCount === total && total > 0;
   const media = exercise.media1 ?? exercise.media2;
   const previewUrl = media ? getMediaPreviewUrl(media) : null;
-  const summary = summarizeSets(exercise);
-  const corColor = !exercise.supersetId && exercise.cor && exercise.cor !== '#f1f1f1' ? exercise.cor : '#6b7280';
+  const corColor = !exercise.supersetId && exercise.cor && exercise.cor !== '#f1f1f1' ? exercise.cor : null;
 
   return (
-    <button
-      className={`w-full flex items-center bg-gray-900 rounded-xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/60' : ''}`}
-      onClick={() => onTap?.(exerciseIndex)}
-    >
+    <div className={`w-full flex bg-gray-900 rounded-xl overflow-hidden transition-all ${isCurrent ? 'ring-2 ring-yellow-400/60' : ''}`}>
       {/* Color bar */}
-      <div className="w-1 self-stretch flex-shrink-0" style={{ backgroundColor: corColor }} />
+      {corColor && <div className="w-1 self-stretch flex-shrink-0" style={{ backgroundColor: corColor }} />}
 
       {/* Thumbnail */}
-      <div className="w-16 h-16 flex-shrink-0 bg-gray-800 flex items-center justify-center overflow-hidden">
+      <button className="w-14 h-14 flex-shrink-0 bg-gray-800 flex items-center justify-center overflow-hidden self-start mt-0" onClick={() => onTap?.(exerciseIndex)}>
         {previewUrl ? (
           <img src={previewUrl} alt={exercise.name} className="w-full h-full object-cover" />
         ) : (
-          <Image size={20} className="text-gray-600" />
+          <Image size={18} className="text-gray-600" />
         )}
-      </div>
+      </button>
 
       {/* Details */}
-      <div className="flex-1 px-3 text-left min-w-0">
-        <p className="text-white text-sm font-semibold truncate">{exercise.name}</p>
-        {summary && <p className="text-gray-400 text-xs mt-0.5">{summary}</p>}
-      </div>
+      <button className="flex-1 px-3 py-2 min-w-0 text-left" onClick={() => onTap?.(exerciseIndex)}>
+        <p className="text-white text-sm font-semibold truncate mb-1.5">{exercise.name}</p>
+        <div className="space-y-0">
+          {exercise.sets.map((set) => (
+            <div key={set.id}>
+              <span className={`text-xs ${set.completed ? 'text-green-400' : 'text-gray-300'}`}>
+                {setLabel(set, exercise.type, exercise.repsMode)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </button>
 
-      {/* Completion badge */}
-      <div className={`w-8 h-8 rounded-full flex-shrink-0 mr-3 flex items-center justify-center border-2 transition-all ${
-        allDone
-          ? 'bg-green-500 border-green-500 text-white'
-          : isCurrent
-          ? 'border-yellow-400 text-gray-500'
-          : 'border-gray-700 text-gray-500'
-      }`}>
-        {allDone ? (
-          <Check size={14} strokeWidth={3} />
-        ) : (
-          <span className="text-[10px] font-bold tabular-nums">{completedCount}/{total}</span>
-        )}
-      </div>
-    </button>
+      {/* Edit button */}
+      <button
+        className="flex-shrink-0 px-3 flex items-center justify-center text-gray-500 hover:text-yellow-400 transition-colors"
+        onClick={() => onEdit?.(exerciseIndex)}
+      >
+        <Pencil size={14} />
+      </button>
+    </div>
   );
 }
 
@@ -630,59 +749,80 @@ function CompactView({
   displayGroups,
   highlightExerciseIndex,
   onScrollTo,
+  onUpdateSetField,
+  onToggleSet,
 }: {
   exercises: TrainingExercise[];
   displayGroups: DisplayGroup[];
   highlightExerciseIndex: number;
   onScrollTo: (idx: number) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onToggleSet: (exerciseIndex: number, setIndex: number) => void;
 }) {
+  const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
+  const editingExercise = editingExerciseIndex !== null ? exercises[editingExerciseIndex] : null;
+
   return (
-    <div className="pb-4 px-4 pt-4 space-y-2">
-      {displayGroups.map((group, groupIdx) => {
-        if (group.type === 'rest') {
-          const ex = exercises[group.exerciseIndex];
-          return (
-            <div key={`rest-${group.exerciseIndex}-${groupIdx}`} className="flex items-center gap-3 bg-gray-900 rounded-xl px-4 py-3">
-              <Clock size={14} className="text-gray-500 flex-shrink-0" />
-              <span className="text-gray-400 text-sm">Descanso — {formatRest(ex.restDuration ?? 0)}</span>
-            </div>
-          );
-        }
-
-        if (group.type === 'superset') {
-          return (
-            <div key={group.superset.id} className="relative flex">
-              <div className="w-0.5 rounded-full mr-3 flex-shrink-0" style={{ backgroundColor: group.superset.color }} />
-              <div className="flex-1 space-y-1.5">
-                <div className="flex items-center gap-2 px-1 pb-0.5">
-                  <span className="px-2 py-0.5 text-gray-900 text-[10px] font-bold rounded-md" style={{ backgroundColor: group.superset.color }}>Superset</span>
-                  <span className="text-gray-400 text-xs">{group.superset.rounds} ciclos</span>
-                </div>
-                {group.exerciseIndices.map((exIdx) => (
-                  <CompactExerciseRow
-                    key={exercises[exIdx].id}
-                    exercise={exercises[exIdx]}
-                    exerciseIndex={exIdx}
-                    isCurrent={highlightExerciseIndex === exIdx}
-                    onTap={onScrollTo}
-                  />
-                ))}
+    <>
+      <div className="pb-4 px-4 pt-4 space-y-2">
+        {displayGroups.map((group, groupIdx) => {
+          if (group.type === 'rest') {
+            const ex = exercises[group.exerciseIndex];
+            return (
+              <div key={`rest-${group.exerciseIndex}-${groupIdx}`} className="flex items-center gap-3 bg-gray-900 rounded-xl px-4 py-3">
+                <Clock size={14} className="text-gray-500 flex-shrink-0" />
+                <span className="text-gray-400 text-sm">Descanso — {formatRest(ex.restDuration ?? 0)}</span>
               </div>
-            </div>
-          );
-        }
+            );
+          }
 
-        return (
-          <CompactExerciseRow
-            key={exercises[group.exerciseIndex].id}
-            exercise={exercises[group.exerciseIndex]}
-            exerciseIndex={group.exerciseIndex}
-            isCurrent={highlightExerciseIndex === group.exerciseIndex}
-            onTap={onScrollTo}
-          />
-        );
-      })}
-    </div>
+          if (group.type === 'superset') {
+            return (
+              <div key={group.superset.id} className="relative flex">
+                <div className="w-0.5 rounded-full mr-3 flex-shrink-0" style={{ backgroundColor: group.superset.color }} />
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2 px-1 pb-0.5">
+                    <span className="px-2 py-0.5 text-gray-900 text-[10px] font-bold rounded-md" style={{ backgroundColor: group.superset.color }}>Superset</span>
+                    <span className="text-gray-400 text-xs">{group.superset.rounds} ciclos</span>
+                  </div>
+                  {group.exerciseIndices.map((exIdx) => (
+                    <CompactExerciseRow
+                      key={exercises[exIdx].id}
+                      exercise={exercises[exIdx]}
+                      exerciseIndex={exIdx}
+                      isCurrent={highlightExerciseIndex === exIdx}
+                      onTap={onScrollTo}
+                      onEdit={setEditingExerciseIndex}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <CompactExerciseRow
+              key={exercises[group.exerciseIndex].id}
+              exercise={exercises[group.exerciseIndex]}
+              exerciseIndex={group.exerciseIndex}
+              isCurrent={highlightExerciseIndex === group.exerciseIndex}
+              onTap={onScrollTo}
+              onEdit={setEditingExerciseIndex}
+            />
+          );
+        })}
+      </div>
+
+      {editingExercise && editingExerciseIndex !== null && (
+        <CompactEditModal
+          exercise={editingExercise}
+          exerciseIndex={editingExerciseIndex}
+          onUpdateSetField={onUpdateSetField}
+          onToggleSet={onToggleSet}
+          onClose={() => setEditingExerciseIndex(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -766,6 +906,7 @@ function GuidedView({
   phase,
   countdown,
   nextStepLabel,
+  onUpdateSetField,
 }: {
   exercises: TrainingExercise[];
   supersets: SupersetGroup[];
@@ -774,6 +915,7 @@ function GuidedView({
   phase: Phase;
   countdown: number | null;
   nextStepLabel: string;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
 }) {
   const currentStep = focusSteps[currentStepIdx];
   if (!currentStep) return null;
@@ -871,11 +1013,31 @@ function GuidedView({
             <>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
                 <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga</p>
-                <p className="text-white font-bold text-lg">{currentSet.weight ?? 0} kg</p>
+                <input
+                  type="number"
+                  value={currentSet.weight ?? 0}
+                  onChange={(e) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'weight', Number(e.target.value) || 0)}
+                  className="w-full bg-transparent text-white font-bold text-lg text-center focus:outline-none focus:text-yellow-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
               </div>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
                 <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Reps</p>
-                <p className="text-yellow-400 font-bold text-lg">{currentSet.reps ?? 0}</p>
+                {currentExercise.repsMode === 'range' ? (
+                  <input
+                    type="number"
+                    value={currentSet.reps ?? ''}
+                    placeholder={currentSet.repsRange ? `${currentSet.repsRange[0]}-${currentSet.repsRange[1]}` : 'reps'}
+                    onChange={(e) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'reps', Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-yellow-400 font-bold text-lg text-center focus:outline-none placeholder:text-gray-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    value={currentSet.reps ?? 0}
+                    onChange={(e) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'reps', Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-yellow-400 font-bold text-lg text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                )}
               </div>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
                 <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Inter</p>
@@ -889,7 +1051,12 @@ function GuidedView({
               {hasWeight && (
                 <div className="bg-gray-800 rounded-xl p-3 text-center">
                   <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga</p>
-                  <p className="text-white font-bold text-lg">{currentSet.weight ?? 0} kg</p>
+                  <input
+                    type="number"
+                    value={currentSet.weight ?? 0}
+                    onChange={(e) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'weight', Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-white font-bold text-lg text-center focus:outline-none focus:text-yellow-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                 </div>
               )}
               <div className={`bg-gray-800 rounded-xl p-3 text-center ${!hasWeight ? 'col-span-2' : ''}`}>
@@ -907,7 +1074,12 @@ function GuidedView({
             <>
               <div className="bg-gray-800 rounded-xl p-3 text-center col-span-2">
                 <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Distância</p>
-                <p className="text-yellow-400 font-bold text-lg">{currentSet.distance ?? 0} m</p>
+                <input
+                  type="number"
+                  value={currentSet.distance ?? 0}
+                  onChange={(e) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'distance', Number(e.target.value) || 0)}
+                  className="w-full bg-transparent text-yellow-400 font-bold text-lg text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
               </div>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
                 <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Inter</p>
@@ -1318,6 +1490,7 @@ export function StrictTrainingPage({
               phase={phase}
               countdown={countdown}
               nextStepLabel={nextStepLabel}
+              onUpdateSetField={handleUpdateSetField}
             />
           </div>
         ) : viewMode === 'compact' ? (
@@ -1327,6 +1500,8 @@ export function StrictTrainingPage({
               displayGroups={displayGroups}
               highlightExerciseIndex={highlightExerciseIndex}
               onScrollTo={scrollToExercise}
+              onUpdateSetField={handleUpdateSetField}
+              onToggleSet={handleToggleSet}
             />
           </div>
         ) : (
