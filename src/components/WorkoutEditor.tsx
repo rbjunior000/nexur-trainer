@@ -1,7 +1,8 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { WorkoutHeader } from './WorkoutHeader';
 import { StrictWorkout } from './StrictWorkout';
-import { Edit2, Dumbbell, Timer } from 'lucide-react';
+import { LoadPreviewModal } from './LoadPreviewModal';
+import { Edit2, Dumbbell, Timer, BarChart2 } from 'lucide-react';
 import type { LibraryExercise } from '../App';
 import type { StrictExercise, ExerciseType } from '../types/workout';
 
@@ -16,6 +17,7 @@ export function WorkoutEditor({
 }) {
   const exercisesRef = useRef<StrictExercise[]>([]);
   const addRestFnRef = useRef<(() => void) | null>(null);
+  const [showLoadPreview, setShowLoadPreview] = useState(false);
 
   const handleExercisesChange = useCallback((exercises: StrictExercise[]) => {
     exercisesRef.current = exercises;
@@ -35,6 +37,13 @@ export function WorkoutEditor({
             >
               <Timer size={16} />
               Descanso
+            </button>
+            <button
+              onClick={() => setShowLoadPreview(true)}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors"
+            >
+              <BarChart2 size={16} />
+              Carga
             </button>
             <button className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors">
               <Edit2 size={16} />
@@ -61,6 +70,13 @@ export function WorkoutEditor({
           defaultExerciseType={defaultExerciseType}
         />
       </div>
+
+      {showLoadPreview && (
+        <LoadPreviewModal
+          exercises={exercisesRef.current}
+          onClose={() => setShowLoadPreview(false)}
+        />
+      )}
     </div>
   );
 }

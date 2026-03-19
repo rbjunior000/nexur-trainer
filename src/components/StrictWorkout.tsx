@@ -115,51 +115,78 @@ const NEXUR_COLORS = [
   '#06394A',
 ];
 
-function ColorBar({ color, onChange }: { color?: string; onChange: (hex: string) => void }) {
+type ColorBarPlacement = 'right' | 'below';
+
+function ColorBar({
+  color,
+  onChange,
+  placement = 'right',
+  children,
+}: {
+  color?: string;
+  onChange: (hex: string) => void;
+  placement?: ColorBarPlacement;
+  children?: (triggerProps: { ref: React.RefObject<HTMLElement | null>; onClick: () => void }) => React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   const handleOpen = () => {
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.top, left: rect.right + 8 });
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (placement === 'below') {
+        setPos({ top: rect.bottom + 4, left: rect.left });
+      } else {
+        setPos({ top: rect.top, left: rect.right + 8 });
+      }
     }
     setOpen((v) => !v);
   };
 
+  const popover = open && (
+    <>
+      <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+      <div
+        className="fixed z-40 bg-white rounded-xl shadow-xl border border-gray-100 p-2"
+        style={{ top: pos.top, left: pos.left }}
+      >
+        <div className="grid grid-cols-4 gap-1.5">
+          {NEXUR_COLORS.map((hex) => (
+            <button
+              key={hex}
+              onClick={() => { onChange(hex); setOpen(false); }}
+              className="w-7 h-7 rounded-lg border-2 transition-transform hover:scale-110 focus:outline-none"
+              style={{
+                background: hex,
+                borderColor: color === hex ? '#374151' : 'transparent',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  if (children) {
+    return (
+      <>
+        {children({ ref: triggerRef, onClick: handleOpen })}
+        {popover}
+      </>
+    );
+  }
+
   return (
     <div className="flex-shrink-0 h-full">
       <button
-        ref={btnRef}
+        ref={triggerRef as React.RefObject<HTMLButtonElement>}
         onClick={handleOpen}
         title="Cor do exercício"
         className="h-full w-2.5 rounded-lg cursor-pointer focus:outline-none"
         style={{ background: color || '#e5e7eb' }}
       />
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div
-            className="fixed z-40 bg-white rounded-xl shadow-xl border border-gray-100 p-2"
-            style={{ top: pos.top, left: pos.left }}
-          >
-            <div className="grid grid-cols-4 gap-1.5">
-              {NEXUR_COLORS.map((hex) => (
-                <button
-                  key={hex}
-                  onClick={() => { onChange(hex); setOpen(false); }}
-                  className="w-7 h-7 rounded-lg border-2 transition-transform hover:scale-110 focus:outline-none"
-                  style={{
-                    background: hex,
-                    borderColor: color === hex ? '#374151' : 'transparent',
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      {popover}
     </div>
   );
 }
@@ -253,11 +280,11 @@ function ConfirmDialog({
 }
 
 // --- Superset connector ---
-function SupersetConnector() {
+function SupersetConnector({ color }: { color: string }) {
   return (
     <div className="relative pl-5 -my-px z-10">
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 rounded-full" />
-      <div className="absolute left-[-3px] top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-yellow-400" />
+      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-full" style={{ background: color }} />
+      <div className="absolute left-[-3px] top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full" style={{ background: color }} />
     </div>
   );
 }
@@ -484,6 +511,15 @@ export function StrictWorkout({
             const nextExercise = index < exercises.length - 1 ? exercises[index + 1] : null;
             const canSuperset = !isRest && !isLast(index) && nextExercise?.type !== 'rest';
 
+            const { supersetColor, chainStartId } = (() => {
+              let s = index;
+              while (s > 0 && exercises[s - 1].supersetWithNext) s--;
+              return {
+                supersetColor: exercises[s].cor || '#FBBF24',
+                chainStartId: exercises[s].id,
+              };
+            })();
+
             return (
               <SortableExerciseItem key={exercise.id} id={exercise.id}>
                 {(handleProps) => (
@@ -494,23 +530,47 @@ export function StrictWorkout({
                     )}
 
                     {/* Superset connector */}
-                    {prevLinked && <SupersetConnector />}
+                    {prevLinked && <SupersetConnector color={supersetColor} />}
 
                     {/* Superset badge above first card of group */}
                     {exercise.supersetWithNext && isFirst && (
                       <div className={`mb-2 ${linked ? 'pl-5' : ''}`}>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400 text-gray-900 rounded-lg text-[11px] font-bold">
-                          <div className="flex items-center gap-4 ">
-                          <Link size={11} />
-                          Superset
-                          </div>
-                        </span>
+                        <ColorBar
+                          color={exercise.cor}
+                          onChange={(hex) => updateExercise(exercise.id, { cor: hex })}
+                          placement="below"
+                        >
+                          {({ ref, onClick }) => (
+                            <button
+                              ref={ref as React.RefObject<HTMLButtonElement>}
+                              onClick={onClick}
+                              style={{ background: supersetColor }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-gray-900 rounded-lg text-[11px] font-bold cursor-pointer focus:outline-none"
+                            >
+                              <Link size={11} />
+                              Superset
+                            </button>
+                          )}
+                        </ColorBar>
                       </div>
                     )}
 
                     <div className={`relative ${linked ? 'pl-5' : ''}`}>
                       {linked && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 rounded-full" />
+                        <ColorBar
+                          color={exercises.find(e => e.id === chainStartId)?.cor}
+                          onChange={(hex) => updateExercise(chainStartId, { cor: hex })}
+                          placement="right"
+                        >
+                          {({ ref, onClick }) => (
+                            <div
+                              ref={ref as React.RefObject<HTMLDivElement>}
+                              onClick={onClick}
+                              className="absolute left-0 top-0 bottom-0 w-1 rounded-full cursor-pointer"
+                              style={{ background: supersetColor }}
+                            />
+                          )}
+                        </ColorBar>
                       )}
 
                       {isRest ? (
@@ -829,7 +889,7 @@ function ExerciseCard({
       {/* Title row – with inline thumbnail on mobile */}
       <div className="flex items-center gap-3">
         <div className="flex gap-1 h-10 flex-shrink-0 md:hidden">
-          <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />
+          {!isPartOfSuperset && <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />}
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
             <MediaPreview media={exercise.media1} alt={exercise.name} />
           </div>
@@ -911,7 +971,7 @@ function ExerciseCard({
       <div className="flex gap-4">
         {/* Thumbnail + color bar – desktop only */}
         <div className="hidden md:flex gap-1 h-36 flex-shrink-0">
-          <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />
+          {!isPartOfSuperset && <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />}
           <div className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100">
             <MediaPreview media={exercise.media1} alt={exercise.name} />
           </div>

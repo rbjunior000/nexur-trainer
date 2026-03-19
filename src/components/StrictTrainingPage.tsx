@@ -55,6 +55,7 @@ interface SupersetGroup {
   label: string;
   exerciseIds: string[];
   rounds: number;
+  color: string;
 }
 
 interface FocusStep {
@@ -141,7 +142,8 @@ function buildSupersetGroups(exercises: StrictExercise[]): {
         const ex = trainingExercises.find((e) => e.id === id);
         return ex ? ex.sets.length : 0;
       }));
-      supersets.push({ id: ssId, label: ssLabel, exerciseIds: ids, rounds: maxSets });
+      const ssColor = exercises[i].cor && exercises[i].cor !== '#f1f1f1' ? exercises[i].cor! : '#FBBF24';
+      supersets.push({ id: ssId, label: ssLabel, exerciseIds: ids, rounds: maxSets, color: ssColor });
       i = j;
     } else {
       trainingExercises.push(toTrainingExercise(exercises[i]));
@@ -395,7 +397,7 @@ function ExerciseCard({
     }
   })();
 
-  const corStyle = exercise.cor && exercise.cor !== '#f1f1f1'
+  const corStyle = !exercise.supersetId && exercise.cor && exercise.cor !== '#f1f1f1'
     ? { borderLeft: `4px solid ${exercise.cor}` }
     : undefined;
 
@@ -483,15 +485,15 @@ function SupersetCard({
     <div className="relative flex">
       {/* Superset side bar */}
       <div className="flex flex-col items-center mr-3 pt-1">
-        <div className="w-0.5 flex-1 bg-red-500/60 rounded-full" />
-        <div className="w-0.5 flex-1 bg-red-500/60 rounded-full" />
+        <div className="w-0.5 flex-1 rounded-full" style={{ backgroundColor: superset.color }} />
+        <div className="w-0.5 flex-1 rounded-full" style={{ backgroundColor: superset.color }} />
       </div>
 
       {/* Stacked exercises */}
       <div className="flex-1 flex flex-col gap-3">
         {/* Superset label row */}
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-red-500 text-white text-xs font-bold rounded-md">
+          <span className="px-2.5 py-1 text-gray-900 text-xs font-bold rounded-md" style={{ backgroundColor: superset.color }}>
             Superset
           </span>
           <span className="text-gray-400 text-sm font-medium">
@@ -580,7 +582,7 @@ function CompactExerciseRow({
   const media = exercise.media1 ?? exercise.media2;
   const previewUrl = media ? getMediaPreviewUrl(media) : null;
   const summary = summarizeSets(exercise);
-  const corColor = exercise.cor && exercise.cor !== '#f1f1f1' ? exercise.cor : '#6b7280';
+  const corColor = !exercise.supersetId && exercise.cor && exercise.cor !== '#f1f1f1' ? exercise.cor : '#6b7280';
 
   return (
     <button
@@ -650,10 +652,10 @@ function CompactView({
         if (group.type === 'superset') {
           return (
             <div key={group.superset.id} className="relative flex">
-              <div className="w-0.5 bg-red-500/60 rounded-full mr-3 flex-shrink-0" />
+              <div className="w-0.5 rounded-full mr-3 flex-shrink-0" style={{ backgroundColor: group.superset.color }} />
               <div className="flex-1 space-y-1.5">
                 <div className="flex items-center gap-2 px-1 pb-0.5">
-                  <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-md">Superset</span>
+                  <span className="px-2 py-0.5 text-gray-900 text-[10px] font-bold rounded-md" style={{ backgroundColor: group.superset.color }}>Superset</span>
                   <span className="text-gray-400 text-xs">{group.superset.rounds} ciclos</span>
                 </div>
                 {group.exerciseIndices.map((exIdx) => (
