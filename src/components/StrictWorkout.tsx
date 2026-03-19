@@ -1164,13 +1164,6 @@ function ExerciseCard({
                     {/* Actions */}
                     <div className="w-14 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => duplicateSet(set.id)}
-                        className="p-1 text-gray-300 hover:text-blue-500 transition-colors"
-                        title="Duplicar série"
-                      >
-                        <Copy size={13} />
-                      </button>
-                      <button
                         onClick={() => removeSet(set.id)}
                         className="p-1 text-gray-300 hover:text-red-500 transition-colors"
                         title="Remover série"

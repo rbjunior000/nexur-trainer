@@ -283,9 +283,6 @@ function SetRow({
 
   return (
     <tr className={`border-b border-gray-800/50 transition-colors ${isCurrent ? 'bg-gray-800/60' : ''}`}>
-      <td className="py-2.5 pl-3 pr-2 text-gray-500 text-sm font-medium w-8">
-        {setIndex + 1}
-      </td>
 
       {exerciseType === 'weight_reps' && (
         <>
@@ -353,10 +350,13 @@ function SetRow({
           className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${
             set.completed
               ? 'bg-green-500 border-green-500 text-white'
-              : 'border-gray-600 text-transparent hover:border-gray-400'
+              : 'border-gray-600 text-gray-500 hover:border-gray-400'
           }`}
         >
-          <Check size={14} strokeWidth={3} />
+          {set.completed
+            ? <Check size={14} strokeWidth={3} />
+            : <span className="text-[11px] font-bold tabular-nums">{setIndex + 1}</span>
+          }
         </button>
       </td>
     </tr>
@@ -388,9 +388,9 @@ function ExerciseCard({
 
   const colHeaders = (() => {
     switch (exercise.type) {
-      case 'weight_reps': return ['#', 'Carga', 'Reps', 'Inter', ''];
-      case 'duration': return hasWeight ? ['#', 'Carga', 'Duração', 'Inter', ''] : ['#', 'Duração', 'Inter', ''];
-      case 'distance': return ['#', 'Distância', 'Inter', ''];
+      case 'weight_reps': return ['Carga', 'Reps', 'Inter', ''];
+      case 'duration': return hasWeight ? ['Carga', 'Duração', 'Inter', ''] : ['Duração', 'Inter', ''];
+      case 'distance': return ['Distância', 'Inter', ''];
       default: return ['#', 'Carga', 'Reps', 'Inter', ''];
     }
   })();
@@ -413,14 +413,6 @@ function ExerciseCard({
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-white font-bold text-lg truncate flex-1">{exercise.name}</h3>
-          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-            <button className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400">
-              <BarChart3 size={14} />
-            </button>
-            <button className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400">
-              <Pencil size={14} />
-            </button>
-          </div>
         </div>
 
         {/* Set Table */}
@@ -428,7 +420,7 @@ function ExerciseCard({
           <thead>
             <tr className="text-gray-500 text-xs uppercase">
               {colHeaders.map((h, i) => (
-                <th key={i} className={`py-1.5 font-semibold text-left ${i === 0 ? 'pl-3 pr-2 w-8' : i === colHeaders.length - 1 ? 'pl-2 pr-3 w-10' : 'px-2'}`}>
+                <th key={i} className={`py-1.5 font-semibold text-left ${i === 0 ? 'pl-3 px-2' : i === colHeaders.length - 1 ? 'pl-2 pr-3 w-10' : 'px-2'}`}>
                   {h}
                 </th>
               ))}
