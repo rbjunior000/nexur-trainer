@@ -238,47 +238,6 @@ function cloneExercise(ex: StrictExercise): StrictExercise {
 }
 
 // --- Confirm dialog ---
-function ConfirmDialog({
-  message,
-  onConfirm,
-  onCancel,
-}: {
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
-    >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-2xl p-6 w-80 shadow-2xl"
-      >
-        <p className="text-sm text-gray-700 mb-6">{message}</p>
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 text-sm font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
-          >
-            Remover
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
 
 // --- Superset connector ---
 function SupersetConnector({ color }: { color: string }) {
@@ -526,10 +485,6 @@ export function StrictWorkout({
 }) {
   const storageKey = defaultExerciseType === 'duration' ? 'nexur-autoplay-exercises' : 'nexur-strict-exercises';
   const [exercises, setExercises] = useLocalStorage<StrictExercise[]>(storageKey, []);
-  const [confirmAction, setConfirmAction] = useState<{
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFillModal, setShowFillModal] = useState(false);
@@ -557,29 +512,21 @@ export function StrictWorkout({
   }, []);
 
   const handleBulkRemove = useCallback(() => {
-    const count = selectedIds.size;
-    setConfirmAction({
-      message: `Remover ${count} exercício${count !== 1 ? 's' : ''} do treino?`,
-      onConfirm: () => {
-        setExercises((prev) => {
-          const toRemove = selectedIds;
-          const next = prev.filter((ex) => !toRemove.has(ex.id));
-          // Fix superset chains
-          for (let i = 0; i < next.length; i++) {
-            if (next[i].supersetWithNext && (i === next.length - 1 || next[i + 1].type === 'rest')) {
-              next[i] = { ...next[i], supersetWithNext: false };
-            }
-          }
-          if (next.length > 0 && next[next.length - 1].supersetWithNext) {
-            next[next.length - 1] = { ...next[next.length - 1], supersetWithNext: false };
-          }
-          return next;
-        });
-        setBulkMode(false);
-        setSelectedIds(new Set());
-        setConfirmAction(null);
-      },
+    setExercises((prev) => {
+      const toRemove = selectedIds;
+      const next = prev.filter((ex) => !toRemove.has(ex.id));
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].supersetWithNext && (i === next.length - 1 || next[i + 1].type === 'rest')) {
+          next[i] = { ...next[i], supersetWithNext: false };
+        }
+      }
+      if (next.length > 0 && next[next.length - 1].supersetWithNext) {
+        next[next.length - 1] = { ...next[next.length - 1], supersetWithNext: false };
+      }
+      return next;
     });
+    setBulkMode(false);
+    setSelectedIds(new Set());
   }, [selectedIds, setExercises]);
 
   const handleBulkClear = useCallback(() => {
@@ -920,15 +867,7 @@ export function StrictWorkout({
                           <ExerciseCard
                             exercise={exercise}
                             onUpdate={(updates) => updateExercise(exercise.id, updates)}
-                            onRemove={() =>
-                              setConfirmAction({
-                                message: `Remover "${exercise.name}" do treino?`,
-                                onConfirm: () => {
-                                  removeExercise(index);
-                                  setConfirmAction(null);
-                                },
-                              })
-                            }
+                            onRemove={() => removeExercise(index)}
                             onDuplicate={() => duplicateExercise(index)}
                             onToggleSuperset={() => {
                               if (!canSuperset) return;
@@ -1018,15 +957,8 @@ export function StrictWorkout({
         </div>
       )}
 
-      {/* Confirm dialog + Fill modal */}
+      {/* Fill modal */}
       <AnimatePresence>
-        {confirmAction && (
-          <ConfirmDialog
-            message={confirmAction.message}
-            onConfirm={confirmAction.onConfirm}
-            onCancel={() => setConfirmAction(null)}
-          />
-        )}
         {showFillModal && (
           <FillModal onApply={handleFillApply} onClose={() => setShowFillModal(false)} />
         )}
@@ -1190,7 +1122,8 @@ function ExerciseCard({
   );
 
   const handleTypeChange = (newType: ExerciseType) => {
-    onUpdate({ type: newType, sets: [], repsMode: 'fixed' });
+    const mappedSets = exercise.sets.map((s) => ({ id: s.id, rest: s.rest }));
+    onUpdate({ type: newType, sets: mappedSets, repsMode: 'fixed' });
     setIsTypeOpen(false);
   };
 
@@ -1598,13 +1531,20 @@ function ExerciseCard({
           </div>
         </div>
 
-        {/* Action buttons – vertical on md+, hidden on mobile (shown below) */}
+        {/* Action buttons – vertical on md+, hidden on mobile (shown in title row) */}
         <div className="hidden md:flex flex-col items-center justify-start gap-1 flex-shrink-0 pt-1">
           <button
             {...dragHandleProps}
             className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
           >
             <GripVertical size={18} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="flex items-center justify-center p-2 text-gray-300 hover:text-red-500 transition-colors"
+            title="Remover exercício"
+          >
+            <Trash2 size={16} />
           </button>
           <div className="relative">
             <button
@@ -1654,13 +1594,6 @@ function ExerciseCard({
                     >
                       <Timer size={15} className="text-gray-400" />
                       Adicionar descanso
-                    </button>
-                    <button
-                      onClick={() => { onRemove(); setIsMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors text-red-500"
-                    >
-                      <Trash2 size={15} />
-                      Remover exercício
                     </button>
                   </motion.div>
                 </>
