@@ -15,6 +15,7 @@ import {
   ArrowRight,
   MoreVertical,
   Timer,
+  X,
 } from 'lucide-react';
 import {
   StrictExercise,
@@ -297,6 +298,191 @@ function isInSuperset(exercises: StrictExercise[], index: number): boolean {
   return false;
 }
 
+// --- Fill Modal ---
+type FillField<T> = { enabled: boolean; value: T };
+type SetTemplate = {
+  weight?: number;
+  reps?: number;
+  repsMin?: number;
+  repsMax?: number;
+  duration?: string;
+  distance?: number;
+  rest: number;
+};
+type FillForm = {
+  type: FillField<ExerciseType>;
+  repsMode: FillField<'fixed' | 'range'>;
+  numSets: FillField<number>;
+  setTemplate: FillField<SetTemplate>;
+  notes: FillField<string>;
+};
+
+function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; onClose: () => void }) {
+  const [form, setForm] = useState<FillForm>({
+    type: { enabled: false, value: 'weight_reps' },
+    repsMode: { enabled: false, value: 'fixed' },
+    numSets: { enabled: false, value: 3 },
+    setTemplate: { enabled: false, value: { rest: 60 } },
+    notes: { enabled: false, value: '' },
+  });
+
+  const setField = <K extends keyof FillForm>(key: K, updates: Partial<FillForm[K]>) => {
+    setForm((prev) => ({ ...prev, [key]: { ...prev[key], ...updates } }));
+  };
+
+  const effectiveType = form.type.enabled ? form.type.value : 'weight_reps';
+  const hasReps = effectiveType === 'weight_reps';
+  const isRange = form.repsMode.value === 'range';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-bold text-gray-900">Preencher em massa</h3>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+          {/* Tipo */}
+          <section>
+            <label className="flex items-center gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" checked={form.type.enabled} onChange={(e) => setField('type', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Tipo de exercício</span>
+            </label>
+            {form.type.enabled && (
+              <div className="flex gap-2 flex-wrap pl-6">
+                {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setField('type', { value: t })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${form.type.value === t ? `${TYPE_CONFIG[t].bgColor} ${TYPE_CONFIG[t].textColor}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    {TYPE_CONFIG[t].label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Modo de reps */}
+          {hasReps && (
+            <section>
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input type="checkbox" checked={form.repsMode.enabled} onChange={(e) => setField('repsMode', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Modo de reps</span>
+              </label>
+              {form.repsMode.enabled && (
+                <div className="flex gap-2 pl-6">
+                  <button onClick={() => setField('repsMode', { value: 'fixed' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.repsMode.value === 'fixed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Reps fixas</button>
+                  <button onClick={() => setField('repsMode', { value: 'range' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${form.repsMode.value === 'range' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Faixa</button>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Número de séries */}
+          <section>
+            <label className="flex items-center gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" checked={form.numSets.enabled} onChange={(e) => setField('numSets', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Número de séries</span>
+            </label>
+            {form.numSets.enabled && (
+              <div className="pl-6">
+                <input
+                  type="number" min={1} max={10}
+                  value={form.numSets.value}
+                  onChange={(e) => setField('numSets', { value: Math.min(10, Math.max(1, Number(e.target.value) || 1)) })}
+                  className="w-20 text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+            )}
+          </section>
+
+          {/* Valores das séries */}
+          <section>
+            <label className="flex items-center gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" checked={form.setTemplate.enabled} onChange={(e) => setField('setTemplate', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Valores das séries</span>
+            </label>
+            {form.setTemplate.enabled && (
+              <div className="pl-6 grid grid-cols-2 gap-2">
+                {effectiveType !== 'distance' && (
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Carga (kg)</label>
+                    <input type="number" min={0} value={form.setTemplate.value.weight ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, weight: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                  </div>
+                )}
+                {hasReps && !isRange && (
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps</label>
+                    <input type="number" min={0} value={form.setTemplate.value.reps ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, reps: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                  </div>
+                )}
+                {hasReps && isRange && (
+                  <>
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps mín</label>
+                      <input type="number" min={0} value={form.setTemplate.value.repsMin ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, repsMin: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase mb-1 block">Reps máx</label>
+                      <input type="number" min={0} value={form.setTemplate.value.repsMax ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, repsMax: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                    </div>
+                  </>
+                )}
+                {effectiveType === 'duration' && (
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Duração</label>
+                    <DurationInput value={form.setTemplate.value.duration || '00:00:30'} onChange={(val) => setField('setTemplate', { value: { ...form.setTemplate.value, duration: val } })} className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                  </div>
+                )}
+                {effectiveType === 'distance' && (
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase mb-1 block">Distância (km)</label>
+                    <input type="number" min={0} value={form.setTemplate.value.distance ?? ''} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, distance: Number(e.target.value) || 0 } })} placeholder="0" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                  </div>
+                )}
+                <div>
+                  <label className="text-[10px] text-gray-400 uppercase mb-1 block">Descanso (seg)</label>
+                  <input type="number" min={0} value={form.setTemplate.value.rest} onChange={(e) => setField('setTemplate', { value: { ...form.setTemplate.value, rest: Number(e.target.value) || 0 } })} placeholder="60" className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400" />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Observações */}
+          <section>
+            <label className="flex items-center gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" checked={form.notes.enabled} onChange={(e) => setField('notes', { enabled: e.target.checked })} className="w-4 h-4 accent-yellow-400" />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Observações</span>
+            </label>
+            {form.notes.enabled && (
+              <textarea value={form.notes.value} onChange={(e) => setField('notes', { value: e.target.value })} placeholder="Notas para todos os exercícios selecionados..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 resize-none h-16 ml-6" style={{ width: 'calc(100% - 1.5rem)' }} />
+            )}
+          </section>
+        </div>
+
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+          <button onClick={() => onApply(form)} className="flex-1 py-2.5 text-sm font-bold text-white bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors">Aplicar</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // --- Empty State ---
 function EmptyState() {
   return (
@@ -322,11 +508,23 @@ function EmptyState() {
 export function StrictWorkout({
   onRegisterAdd,
   onRegisterAddRest,
+  onRegisterToggleBulk,
+  onRegisterBulkClear,
+  onRegisterBulkRemove,
+  onRegisterBulkFill,
+  onRegisterToggleSelectAll,
+  onBulkStateChange,
   onExercisesChange,
   defaultExerciseType = 'weight_reps',
 }: {
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
   onRegisterAddRest?: (fn: () => void) => void;
+  onRegisterToggleBulk?: (fn: () => void) => void;
+  onRegisterBulkClear?: (fn: () => void) => void;
+  onRegisterBulkRemove?: (fn: () => void) => void;
+  onRegisterBulkFill?: (fn: () => void) => void;
+  onRegisterToggleSelectAll?: (fn: () => void) => void;
+  onBulkStateChange?: (state: { active: boolean; count: number; allSelected: boolean }) => void;
   onExercisesChange?: (exercises: StrictExercise[]) => void;
   defaultExerciseType?: ExerciseType;
 }) {
@@ -336,6 +534,120 @@ export function StrictWorkout({
     message: string;
     onConfirm: () => void;
   } | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showFillModal, setShowFillModal] = useState(false);
+
+  const selectableExercises = useMemo(() => exercises.filter((ex) => ex.type !== 'rest'), [exercises]);
+  const allSelected = selectableExercises.length > 0 && selectableExercises.every((ex) => selectedIds.has(ex.id));
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(allSelected ? new Set() : new Set(selectableExercises.map((ex) => ex.id)));
+  }, [allSelected, selectableExercises]);
+
+  const toggleBulkMode = useCallback(() => {
+    setBulkMode((v) => {
+      if (v) setSelectedIds(new Set());
+      return !v;
+    });
+  }, []);
+
+  const handleBulkRemove = useCallback(() => {
+    const count = selectedIds.size;
+    setConfirmAction({
+      message: `Remover ${count} exercício${count !== 1 ? 's' : ''} do treino?`,
+      onConfirm: () => {
+        setExercises((prev) => {
+          const toRemove = selectedIds;
+          const next = prev.filter((ex) => !toRemove.has(ex.id));
+          // Fix superset chains
+          for (let i = 0; i < next.length; i++) {
+            if (next[i].supersetWithNext && (i === next.length - 1 || next[i + 1].type === 'rest')) {
+              next[i] = { ...next[i], supersetWithNext: false };
+            }
+          }
+          if (next.length > 0 && next[next.length - 1].supersetWithNext) {
+            next[next.length - 1] = { ...next[next.length - 1], supersetWithNext: false };
+          }
+          return next;
+        });
+        setBulkMode(false);
+        setSelectedIds(new Set());
+        setConfirmAction(null);
+      },
+    });
+  }, [selectedIds, setExercises]);
+
+  const handleBulkClear = useCallback(() => {
+    setExercises((prev) =>
+      prev.map((ex) => (selectedIds.has(ex.id) ? { ...ex, sets: [], notes: '' } : ex))
+    );
+    setSelectedIds(new Set());
+  }, [selectedIds, setExercises]);
+
+  const handleFillApply = useCallback((form: FillForm) => {
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (!selectedIds.has(ex.id)) return ex;
+        let updated = { ...ex };
+        if (form.type.enabled) {
+          updated = { ...updated, type: form.type.value, sets: [] };
+        }
+        const effectiveType = form.type.enabled ? form.type.value : ex.type;
+        const effectiveRepsMode = form.repsMode.enabled ? form.repsMode.value : ex.repsMode;
+        if (form.repsMode.enabled && effectiveType === 'weight_reps') {
+          updated = { ...updated, repsMode: form.repsMode.value };
+        }
+        if (form.numSets.enabled && form.setTemplate.enabled) {
+          const count = form.numSets.value;
+          const tmpl = form.setTemplate.value;
+          const newSets: StrictSet[] = [];
+          for (let i = 0; i < count; i++) {
+            const set: StrictSet = { id: uid(), rest: tmpl.rest ?? 60 };
+            if (effectiveType !== 'distance') set.weight = tmpl.weight ?? 0;
+            if (effectiveType === 'weight_reps') {
+              if (effectiveRepsMode === 'range') {
+                set.repsRange = [tmpl.repsMin ?? 0, tmpl.repsMax ?? 0];
+              } else {
+                set.reps = tmpl.reps ?? 0;
+              }
+            }
+            if (effectiveType === 'duration') set.duration = tmpl.duration ?? '00:00:30';
+            if (effectiveType === 'distance') set.distance = tmpl.distance ?? 0;
+            newSets.push(set);
+          }
+          updated = { ...updated, sets: newSets };
+        } else if (form.numSets.enabled) {
+          const count = form.numSets.value;
+          const currentSets = updated.sets;
+          if (currentSets.length < count) {
+            const extra: StrictSet[] = [];
+            for (let i = currentSets.length; i < count; i++) {
+              const lastSet = currentSets[currentSets.length - 1];
+              extra.push(lastSet ? { ...lastSet, id: uid() } : { id: uid(), rest: 60 });
+            }
+            updated = { ...updated, sets: [...currentSets, ...extra] };
+          } else if (currentSets.length > count) {
+            updated = { ...updated, sets: currentSets.slice(0, count) };
+          }
+        }
+        if (form.notes.enabled) {
+          updated = { ...updated, notes: form.notes.value };
+        }
+        return updated;
+      })
+    );
+    setShowFillModal(false);
+    setSelectedIds(new Set());
+  }, [selectedIds, setExercises]);
 
   const addFromLibrary = useCallback((ex: LibraryExercise) => {
     const isDuration = defaultExerciseType === 'duration';
@@ -388,6 +700,30 @@ export function StrictWorkout({
   useEffect(() => {
     onRegisterAddRest?.(addRestAtEnd);
   }, [onRegisterAddRest, addRestAtEnd]);
+
+  useEffect(() => {
+    onRegisterToggleBulk?.(toggleBulkMode);
+  }, [onRegisterToggleBulk, toggleBulkMode]);
+
+  useEffect(() => {
+    onRegisterBulkClear?.(handleBulkClear);
+  }, [onRegisterBulkClear, handleBulkClear]);
+
+  useEffect(() => {
+    onRegisterBulkRemove?.(handleBulkRemove);
+  }, [onRegisterBulkRemove, handleBulkRemove]);
+
+  useEffect(() => {
+    onRegisterBulkFill?.(() => setShowFillModal(true));
+  }, [onRegisterBulkFill]);
+
+  useEffect(() => {
+    onRegisterToggleSelectAll?.(toggleSelectAll);
+  }, [onRegisterToggleSelectAll, toggleSelectAll]);
+
+  useEffect(() => {
+    onBulkStateChange?.({ active: bulkMode, count: selectedIds.size, allSelected });
+  }, [bulkMode, selectedIds, allSelected, onBulkStateChange]);
 
   useEffect(() => {
     onExercisesChange?.(exercises);
@@ -555,87 +891,99 @@ export function StrictWorkout({
                       </div>
                     )}
 
-                    <div className={`relative ${linked ? 'pl-5' : ''}`}>
-                      {linked && (
-                        <ColorBar
-                          color={exercises.find(e => e.id === chainStartId)?.cor}
-                          onChange={(hex) => updateExercise(chainStartId, { cor: hex })}
-                          placement="right"
-                        >
-                          {({ ref, onClick }) => (
-                            <div
-                              ref={ref as React.RefObject<HTMLDivElement>}
-                              onClick={onClick}
-                              className="absolute left-0 top-0 bottom-0 w-1 rounded-full cursor-pointer"
-                              style={{ background: supersetColor }}
-                            />
-                          )}
-                        </ColorBar>
+                    <div className={bulkMode && !isRest ? 'flex items-start gap-2' : ''}>
+                      {bulkMode && !isRest && (
+                        <div className="flex-shrink-0 pt-5">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(exercise.id)}
+                            onChange={() => toggleSelect(exercise.id)}
+                            className="w-4 h-4 accent-yellow-400 cursor-pointer"
+                          />
+                        </div>
                       )}
+                      <div className={`relative flex-1 ${linked ? 'pl-5' : ''}`}>
+                        {linked && (
+                          <ColorBar
+                            color={exercises.find(e => e.id === chainStartId)?.cor}
+                            onChange={(hex) => updateExercise(chainStartId, { cor: hex })}
+                            placement="right"
+                          >
+                            {({ ref, onClick }) => (
+                              <div
+                                ref={ref as React.RefObject<HTMLDivElement>}
+                                onClick={onClick}
+                                className="absolute left-0 top-0 bottom-0 w-1 rounded-full cursor-pointer"
+                                style={{ background: supersetColor }}
+                              />
+                            )}
+                          </ColorBar>
+                        )}
 
-                      {isRest ? (
-                        <RestCard
-                          exercise={exercise}
-                          onUpdate={(updates) => updateExercise(exercise.id, updates)}
-                          onRemove={() => removeExercise(index)}
-                          dragHandleProps={handleProps}
-                        />
-                      ) : (
-                        <ExerciseCard
-                          exercise={exercise}
-                          onUpdate={(updates) => updateExercise(exercise.id, updates)}
-                          onRemove={() =>
-                            setConfirmAction({
-                              message: `Remover "${exercise.name}" do treino?`,
-                              onConfirm: () => {
-                                removeExercise(index);
-                                setConfirmAction(null);
-                              },
-                            })
-                          }
-                          onDuplicate={() => duplicateExercise(index)}
-                          onToggleSuperset={() => {
-                            if (!canSuperset) return;
-                            setExercises((prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], supersetWithNext: true };
+                        {isRest ? (
+                          <RestCard
+                            exercise={exercise}
+                            onUpdate={(updates) => updateExercise(exercise.id, updates)}
+                            onRemove={() => removeExercise(index)}
+                            dragHandleProps={bulkMode ? undefined : handleProps}
+                          />
+                        ) : (
+                          <ExerciseCard
+                            exercise={exercise}
+                            onUpdate={(updates) => updateExercise(exercise.id, updates)}
+                            onRemove={() =>
+                              setConfirmAction({
+                                message: `Remover "${exercise.name}" do treino?`,
+                                onConfirm: () => {
+                                  removeExercise(index);
+                                  setConfirmAction(null);
+                                },
+                              })
+                            }
+                            onDuplicate={() => duplicateExercise(index)}
+                            onToggleSuperset={() => {
+                              if (!canSuperset) return;
+                              setExercises((prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], supersetWithNext: true };
 
-                              // Find full chain boundaries
-                              let chainStart = index;
-                              while (chainStart > 0 && next[chainStart - 1].supersetWithNext) chainStart--;
-                              let chainEnd = index;
-                              while (chainEnd < next.length - 1 && next[chainEnd].supersetWithNext) chainEnd++;
+                                // Find full chain boundaries
+                                let chainStart = index;
+                                while (chainStart > 0 && next[chainStart - 1].supersetWithNext) chainStart--;
+                                let chainEnd = index;
+                                while (chainEnd < next.length - 1 && next[chainEnd].supersetWithNext) chainEnd++;
 
-                              // Last exercise in chain: all sets rest=60. Others: all sets rest=0.
-                              for (let j = chainStart; j <= chainEnd; j++) {
-                                if (next[j].type === 'rest') continue;
-                                const isLast = j === chainEnd;
-                                const ex = next[j];
-                                next[j] = { ...ex, sets: ex.sets.map(s => ({ ...s, rest: isLast ? 60 : 0 })) };
-                              }
-                              return next;
-                            });
-                          }}
-                          onUnlinkSuperset={() => {
-                            setExercises((prev) => {
-                              const next = [...prev];
-                              if (next[index].supersetWithNext) {
-                                next[index] = { ...next[index], supersetWithNext: false };
-                              }
-                              if (index > 0 && next[index - 1].supersetWithNext) {
-                                next[index - 1] = { ...next[index - 1], supersetWithNext: false };
-                              }
-                              return next;
-                            });
-                          }}
-                          onAddRestAfter={() => insertRestAt(index + 1)}
-                          isLast={isLast(index)}
-                          canSuperset={canSuperset}
-                          isPartOfSuperset={linked}
-                          lockType={defaultExerciseType !== 'weight_reps'}
-                          dragHandleProps={handleProps}
-                        />
-                      )}
+                                // Last exercise in chain: all sets rest=60. Others: all sets rest=0.
+                                for (let j = chainStart; j <= chainEnd; j++) {
+                                  if (next[j].type === 'rest') continue;
+                                  const isLast = j === chainEnd;
+                                  const ex = next[j];
+                                  next[j] = { ...ex, sets: ex.sets.map(s => ({ ...s, rest: isLast ? 60 : 0 })) };
+                                }
+                                return next;
+                              });
+                            }}
+                            onUnlinkSuperset={() => {
+                              setExercises((prev) => {
+                                const next = [...prev];
+                                if (next[index].supersetWithNext) {
+                                  next[index] = { ...next[index], supersetWithNext: false };
+                                }
+                                if (index > 0 && next[index - 1].supersetWithNext) {
+                                  next[index - 1] = { ...next[index - 1], supersetWithNext: false };
+                                }
+                                return next;
+                              });
+                            }}
+                            onAddRestAfter={() => insertRestAt(index + 1)}
+                            isLast={isLast(index)}
+                            canSuperset={canSuperset}
+                            isPartOfSuperset={linked}
+                            lockType={defaultExerciseType !== 'weight_reps'}
+                            dragHandleProps={bulkMode ? undefined : handleProps}
+                          />
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -681,7 +1029,7 @@ export function StrictWorkout({
         </div>
       )}
 
-      {/* Confirm dialog */}
+      {/* Confirm dialog + Fill modal */}
       <AnimatePresence>
         {confirmAction && (
           <ConfirmDialog
@@ -689,6 +1037,9 @@ export function StrictWorkout({
             onConfirm={confirmAction.onConfirm}
             onCancel={() => setConfirmAction(null)}
           />
+        )}
+        {showFillModal && (
+          <FillModal onApply={handleFillApply} onClose={() => setShowFillModal(false)} />
         )}
       </AnimatePresence>
     </div>
