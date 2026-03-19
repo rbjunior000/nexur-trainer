@@ -28,7 +28,7 @@ export function WorkoutEditor({
       <WorkoutHeader />
 
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Exercicios</h2>
           <div className="flex gap-3">
             <button
