@@ -1444,7 +1444,6 @@ function ExerciseCard({
                 {exercise.sets.map((set, setIndex) => (
                   <motion.div
                     key={set.id}
-                    layout
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10, height: 0 }}
