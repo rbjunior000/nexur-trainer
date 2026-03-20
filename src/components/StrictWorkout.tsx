@@ -16,11 +16,15 @@ import {
   MoreVertical,
   Timer,
   X,
+  Flame,
+  CornerDownRight,
 } from 'lucide-react';
 import {
   StrictExercise,
   ExerciseType,
   StrictSet,
+  SetType,
+  DropSet,
   makeRestExercise,
 } from '../types/workout';
 import { getMediaPreviewUrl } from '../types/media';
@@ -260,6 +264,7 @@ function isInSuperset(exercises: StrictExercise[], index: number): boolean {
 // --- Fill Modal ---
 type FillForm = {
   type: ExerciseType | null;
+  setType: SetType | null;
   numSets: number | null;
   repsMode: 'fixed' | 'range' | null;
   weight: number | null;
@@ -276,6 +281,7 @@ const INPUT_CLS = 'w-full text-center bg-gray-50 border border-gray-200 rounded-
 
 function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; onClose: () => void }) {
   const [type, setType] = useState<ExerciseType | null>(null);
+  const [serieType, setSerieType] = useState<SetType | null>(null);
   const [numSets, setNumSets] = useState<number | null>(null);
   const [repsMode, setRepsMode] = useState<'fixed' | 'range' | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
@@ -288,11 +294,14 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
   const [rest, setRest] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
 
+  const isDropset = serieType === 'dropset';
+
   const handleApply = () => {
-    onApply({ type, numSets, repsMode, weight, reps, repsMin, repsMax, duration: durationEnabled ? duration : null, distance, rest, notes: notes !== '' ? notes : null });
+    onApply({ type, setType: serieType, numSets, repsMode, weight, reps, repsMin, repsMax, duration: durationEnabled ? duration : null, distance, rest: isDropset ? 0 : rest, notes: notes !== '' ? notes : null });
   };
 
   const toggleType = (t: ExerciseType) => setType((prev) => prev === t ? null : t);
+  const toggleSetType = (t: SetType) => setSerieType((prev) => prev === t ? null : t);
   const toggleRepsMode = (m: 'fixed' | 'range') => setRepsMode((prev) => prev === m ? null : m);
 
   const numInput = (val: number | null, onChange: (v: number | null) => void, placeholder: string) => (
@@ -326,7 +335,7 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-          {/* Tipo */}
+          {/* Tipo de exercício */}
           <div>
             <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Tipo de exercício</label>
             <div className="flex gap-1.5 flex-wrap">
@@ -337,6 +346,26 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${type === t ? `${TYPE_CONFIG[t].bgColor} ${TYPE_CONFIG[t].textColor}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                 >
                   {TYPE_CONFIG[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tipo de série */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Tipo de série</label>
+            <div className="flex gap-1.5">
+              {([['normal', 'Normal'], ['warmup', 'Aquecimento'], ['dropset', 'Drop Set']] as [SetType, string][]).map(([t, label]) => (
+                <button
+                  key={t}
+                  onClick={() => toggleSetType(t)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    serieType === t
+                      ? t === 'warmup' ? 'bg-amber-100 text-amber-700' : t === 'dropset' ? 'bg-orange-100 text-orange-700' : 'bg-gray-200 text-gray-700'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {label}
                 </button>
               ))}
             </div>
@@ -413,7 +442,11 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
 
             <div>
               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">Descanso (seg)</label>
-              {numInput(rest, setRest, '60s')}
+              {isDropset ? (
+                <div className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-300 cursor-not-allowed select-none">
+                  OFF
+                </div>
+              ) : numInput(rest, setRest, '60s')}
             </div>
           </div>
 
@@ -559,6 +592,17 @@ export function StrictWorkout({
             }
           } else {
             if (form.reps !== null) ns.reps = form.reps;
+          }
+          if (form.setType !== null) {
+            ns.type = form.setType;
+            if (form.setType === 'dropset') {
+              ns.rest = 0;
+              if (!ns.dropsets || ns.dropsets.length === 0) {
+                ns.dropsets = makeInitialDropsets(ns);
+              }
+            } else {
+              ns.dropsets = undefined;
+            }
           }
           return ns;
         };
@@ -1086,6 +1130,188 @@ function RestCard({
   );
 }
 
+// --- Set Type Badge ---
+function SetTypeBadge({ set, index, onChangeType }: { set: StrictSet; index: number; onChangeType: (type: SetType) => void }) {
+  const [open, setOpen] = useState(false);
+  const type = set.type ?? 'normal';
+
+  const badge = type === 'warmup' ? (
+    <span className="w-8 h-7 flex items-center justify-center rounded-md bg-amber-100 text-amber-600 text-xs font-bold flex-shrink-0">W</span>
+  ) : type === 'dropset' ? (
+    <span className="w-8 h-7 flex items-center justify-center rounded-md bg-orange-100 text-orange-500 flex-shrink-0">
+      <CornerDownRight size={14} />
+    </span>
+  ) : (
+    <span className="w-8 h-7 flex items-center justify-center rounded-md text-sm font-bold text-gray-400 flex-shrink-0">{index + 1}</span>
+  );
+
+  return (
+    <div className="relative flex-shrink-0">
+      <button onClick={() => setOpen(!open)} className="focus:outline-none" title="Tipo da série">
+        {badge}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+              className="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
+            >
+              {(['normal', 'warmup', 'dropset'] as SetType[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { onChangeType(t); setOpen(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors hover:bg-gray-50 ${type === t ? 'font-semibold text-gray-900' : 'text-gray-600'}`}
+                >
+                  {t === 'normal' && <span className="w-5 h-5 flex items-center justify-center rounded text-xs font-bold text-gray-400 bg-gray-100">{index + 1}</span>}
+                  {t === 'warmup' && <span className="w-5 h-5 flex items-center justify-center rounded text-xs font-bold text-amber-600 bg-amber-100"><Flame size={12} /></span>}
+                  {t === 'dropset' && <span className="w-5 h-5 flex items-center justify-center rounded text-orange-500 bg-orange-100"><CornerDownRight size={12} /></span>}
+                  {t === 'normal' ? 'Normal' : t === 'warmup' ? 'Aquecimento' : 'Drop Set'}
+                  {type === t && <Check size={12} className="ml-auto text-yellow-500" />}
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// --- Dropset Row ---
+type DropsetRowProps = {
+  drop: DropSet;
+  isLast: boolean;
+  config: { columns: ColumnConfig[] };
+  hasReps: boolean | undefined;
+  isRange: boolean;
+  onUpdate: (field: keyof DropSet, value: any) => void;
+  onRemove: () => void;
+  onAdd: () => void;
+};
+
+function DropsetRow({ drop, isLast, config, hasReps, isRange, onUpdate, onRemove, onAdd }: DropsetRowProps) {
+  return (
+    <div className="flex items-center gap-2 bg-orange-50 p-2 rounded-lg group px-1 ml-2">
+      {/* Badge */}
+      <div className="w-8 flex-shrink-0 flex items-center justify-center">
+        {isLast ? (
+          <button
+            onClick={onAdd}
+            className="w-8 h-7 flex items-center justify-center rounded-md bg-orange-200 text-orange-600 hover:bg-orange-300 transition-colors"
+            title="Adicionar drop"
+          >
+            <span className="flex items-center"><CornerDownRight size={12} /><Plus size={10} /></span>
+          </button>
+        ) : (
+          <span className="w-8 h-7 flex items-center justify-center rounded-md bg-orange-100 text-orange-400">
+            <CornerDownRight size={14} />
+          </span>
+        )}
+      </div>
+
+      {config.columns.map((col) => (
+        <div key={col.key} className="flex-1 relative">
+          {col.key === 'duration' ? (
+            <DurationInput
+              value={(drop.duration as string) || ''}
+              onChange={(masked) => onUpdate('duration', masked)}
+              placeholder={col.placeholder}
+              className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all tabular-nums"
+            />
+          ) : (
+            <>
+              <input
+                type={col.type}
+                value={(drop[col.key as keyof DropSet] as string | number) || ''}
+                onChange={(e) => onUpdate(col.key as keyof DropSet, e.target.value)}
+                placeholder={col.placeholder}
+                className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
+              />
+              {col.suffix && (
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
+                  {col.suffix}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+
+      {/* Reps cell */}
+      {hasReps && (
+        isRange ? (
+          <div className="flex-1 flex items-center gap-1">
+            <input
+              type="number"
+              value={drop.repsRange?.[0] || ''}
+              onChange={(e) => {
+                const min = Number(e.target.value) || 0;
+                const max = drop.repsRange?.[1] || 0;
+                onUpdate('repsRange', [min, max]);
+              }}
+              placeholder="0"
+              className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
+            />
+            <span className="text-gray-300 text-sm flex-shrink-0">-</span>
+            <input
+              type="number"
+              value={drop.repsRange?.[1] || ''}
+              onChange={(e) => {
+                const min = drop.repsRange?.[0] || 0;
+                const max = Number(e.target.value) || 0;
+                onUpdate('repsRange', [min, max]);
+              }}
+              placeholder="0"
+              className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
+            />
+          </div>
+        ) : (
+          <div className="flex-1">
+            <input
+              type="number"
+              value={drop.reps || ''}
+              onChange={(e) => onUpdate('reps', e.target.value)}
+              placeholder="0"
+              className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
+            />
+          </div>
+        )
+      )}
+
+      {/* Rest column — disabled, always OFF for dropsets */}
+      <div className="w-20 flex-shrink-0">
+        <div className="w-full text-center bg-gray-50 border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-300 cursor-not-allowed select-none">
+          OFF
+        </div>
+      </div>
+
+      {/* Remove */}
+      <div className="w-14 flex items-center justify-center flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onRemove}
+          className="p-1 text-orange-300 hover:text-red-500 transition-colors"
+          title="Remover drop"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function makeInitialDropsets(s: { reps?: number; repsRange?: [number, number]; weight?: number; duration?: string; distance?: number }): DropSet[] {
+  const w1 = s.weight && s.weight > 0 ? Math.max(0, Math.round(s.weight * 0.8)) : s.weight;
+  const w2 = w1 && w1 > 0 ? Math.max(0, Math.round(w1 * 0.8)) : w1;
+  return [
+    { id: uid(), reps: s.reps, repsRange: s.repsRange, weight: w1, duration: s.duration, distance: s.distance },
+    { id: uid(), reps: s.reps, repsRange: s.repsRange, weight: w2, duration: s.duration, distance: s.distance },
+  ];
+}
+
 // --- Exercise Card ---
 function ExerciseCard({
   exercise,
@@ -1156,6 +1382,53 @@ function ExerciseCard({
     const newSets = [...exercise.sets];
     newSets.splice(idx + 1, 0, clone);
     onUpdate({ sets: newSets });
+  };
+
+  const updateSetType = (setId: string, type: SetType) => {
+    onUpdate({
+      sets: exercise.sets.map((s) => {
+        if (s.id !== setId) return s;
+        if (type === 'dropset') {
+          const existing = s.dropsets && s.dropsets.length > 0 ? s.dropsets : makeInitialDropsets(s);
+          return { ...s, type, dropsets: existing };
+        }
+        return { ...s, type, dropsets: undefined };
+      }),
+    });
+  };
+
+  const addDropset = (setId: string) => {
+    onUpdate({
+      sets: exercise.sets.map((s) => {
+        if (s.id !== setId) return s;
+        const last = s.dropsets?.[s.dropsets.length - 1];
+        const prevWeight = last?.weight ?? 0;
+        const reducedWeight = prevWeight > 0 ? Math.max(0, Math.round(prevWeight * 0.8)) : undefined;
+        const newDrop: DropSet = { id: uid(), reps: last?.reps, repsRange: last?.repsRange, weight: reducedWeight, duration: last?.duration, distance: last?.distance };
+        return { ...s, dropsets: [...(s.dropsets ?? []), newDrop] };
+      }),
+    });
+  };
+
+  const updateDropset = (setId: string, dropId: string, field: keyof DropSet, value: any) => {
+    onUpdate({
+      sets: exercise.sets.map((s) => {
+        if (s.id !== setId) return s;
+        return { ...s, dropsets: (s.dropsets ?? []).map((d) => d.id === dropId ? { ...d, [field]: value } : d) };
+      }),
+    });
+  };
+
+  const removeDropset = (setId: string, dropId: string) => {
+    onUpdate({
+      sets: exercise.sets.map((s) => {
+        if (s.id !== setId) return s;
+        const remaining = (s.dropsets ?? []).filter((d) => d.id !== dropId);
+        return remaining.length === 0
+          ? { ...s, type: 'normal' as const, dropsets: undefined }
+          : { ...s, dropsets: remaining };
+      }),
+    });
   };
 
   return (
@@ -1381,129 +1654,151 @@ function ExerciseCard({
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10, height: 0 }}
-                    className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg group hover:bg-gray-100 transition-colors px-1"
+                    className="flex flex-col gap-1"
                   >
-                    <div className="w-8 text-sm font-bold text-gray-400 text-center flex-shrink-0">{setIndex + 1}</div>
+                    {/* Main set row */}
+                    <div className={`flex items-center gap-2 p-2 rounded-lg group transition-colors px-1 ${set.type === 'dropset' ? 'bg-orange-50 hover:bg-orange-100' : set.type === 'warmup' ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                      <SetTypeBadge
+                        set={set}
+                        index={setIndex}
+                        onChangeType={(type) => updateSetType(set.id, type)}
+                      />
 
-                    {config.columns.map((col) => (
-                      <div key={col.key} className="flex-1 relative">
-                        {col.key === 'duration' ? (
-                          <DurationInput
-                            value={(set.duration as string) || ''}
-                            onChange={(masked) => updateSet(set.id, 'duration', masked)}
-                            placeholder={col.placeholder}
-                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
-                          />
-                        ) : (
-                          <>
-                            <input
-                              type={col.type}
-                              value={(set[col.key] as string | number) || ''}
-                              onChange={(e) => updateSet(set.id, col.key, e.target.value)}
+                      {config.columns.map((col) => (
+                        <div key={col.key} className="flex-1 relative">
+                          {col.key === 'duration' ? (
+                            <DurationInput
+                              value={(set.duration as string) || ''}
+                              onChange={(masked) => updateSet(set.id, 'duration', masked)}
                               placeholder={col.placeholder}
+                              className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
+                            />
+                          ) : (
+                            <>
+                              <input
+                                type={col.type}
+                                value={(set[col.key] as string | number) || ''}
+                                onChange={(e) => updateSet(set.id, col.key, e.target.value)}
+                                placeholder={col.placeholder}
+                                className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                              />
+                              {col.suffix && (
+                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
+                                  {col.suffix}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Reps cell */}
+                      {hasReps && (
+                        isRange ? (
+                          <div className="flex-1 flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={set.repsRange?.[0] || ''}
+                              onChange={(e) => {
+                                const min = Number(e.target.value) || 0;
+                                const max = set.repsRange?.[1] || 0;
+                                updateSet(set.id, 'repsRange', [min, max]);
+                              }}
+                              placeholder="0"
                               className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
                             />
-                            {col.suffix && (
-                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
-                                {col.suffix}
-                              </span>
-                            )}
-                          </>
+                            <span className="text-gray-300 text-sm flex-shrink-0">-</span>
+                            <input
+                              type="number"
+                              value={set.repsRange?.[1] || ''}
+                              onChange={(e) => {
+                                const min = set.repsRange?.[0] || 0;
+                                const max = Number(e.target.value) || 0;
+                                updateSet(set.id, 'repsRange', [min, max]);
+                              }}
+                              placeholder="0"
+                              className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              value={set.reps || ''}
+                              onChange={(e) => updateSet(set.id, 'reps', e.target.value)}
+                              placeholder="0"
+                              className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                            />
+                          </div>
+                        )
+                      )}
+
+                      {/* Rest per set */}
+                      <div className="w-20 flex-shrink-0">
+                        {customRestSetIds.has(set.id) ? (
+                          <div className="relative">
+                            <input
+                              autoFocus
+                              type="number"
+                              min={0}
+                              value={set.rest || ''}
+                              onChange={(e) => updateSet(set.id, 'rest', Number(e.target.value) || 0)}
+                              placeholder="45"
+                              className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all pr-7"
+                            />
+                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 pointer-events-none">seg</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={REST_PRESET_VALUES.has(set.rest) ? set.rest : 'custom'}
+                            onChange={(e) => {
+                              if (e.target.value === 'custom') {
+                                setCustomRestSetIds((prev) => new Set(prev).add(set.id));
+                              } else {
+                                updateSet(set.id, 'rest', Number(e.target.value));
+                                setCustomRestSetIds((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(set.id);
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-600 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all appearance-none cursor-pointer"
+                          >
+                            {REST_PRESETS.map((p) => (
+                              <option key={p.value} value={p.value}>{p.label}</option>
+                            ))}
+                            <option value="custom">Outro</option>
+                          </select>
                         )}
                       </div>
-                    ))}
 
-                    {/* Reps cell */}
-                    {hasReps && (
-                      isRange ? (
-                        <div className="flex-1 flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={set.repsRange?.[0] || ''}
-                            onChange={(e) => {
-                              const min = Number(e.target.value) || 0;
-                              const max = set.repsRange?.[1] || 0;
-                              updateSet(set.id, 'repsRange', [min, max]);
-                            }}
-                            placeholder="0"
-                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
-                          />
-                          <span className="text-gray-300 text-sm flex-shrink-0">-</span>
-                          <input
-                            type="number"
-                            value={set.repsRange?.[1] || ''}
-                            onChange={(e) => {
-                              const min = set.repsRange?.[0] || 0;
-                              const max = Number(e.target.value) || 0;
-                              updateSet(set.id, 'repsRange', [min, max]);
-                            }}
-                            placeholder="0"
-                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex-1">
-                          <input
-                            type="number"
-                            value={set.reps || ''}
-                            onChange={(e) => updateSet(set.id, 'reps', e.target.value)}
-                            placeholder="0"
-                            className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
-                          />
-                        </div>
-                      )
-                    )}
-
-                    {/* Rest per set */}
-                    <div className="w-20 flex-shrink-0">
-                      {customRestSetIds.has(set.id) ? (
-                        <div className="relative">
-                          <input
-                            autoFocus
-                            type="number"
-                            min={0}
-                            value={set.rest || ''}
-                            onChange={(e) => updateSet(set.id, 'rest', Number(e.target.value) || 0)}
-                            placeholder="45"
-                            className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all pr-7"
-                          />
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 pointer-events-none">seg</span>
-                        </div>
-                      ) : (
-                        <select
-                          value={REST_PRESET_VALUES.has(set.rest) ? set.rest : 'custom'}
-                          onChange={(e) => {
-                            if (e.target.value === 'custom') {
-                              setCustomRestSetIds((prev) => new Set(prev).add(set.id));
-                            } else {
-                              updateSet(set.id, 'rest', Number(e.target.value));
-                              setCustomRestSetIds((prev) => {
-                                const next = new Set(prev);
-                                next.delete(set.id);
-                                return next;
-                              });
-                            }
-                          }}
-                          className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-600 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all appearance-none cursor-pointer"
+                      {/* Actions */}
+                      <div className="w-14 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => removeSet(set.id)}
+                          className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                          title="Remover série"
                         >
-                          {REST_PRESETS.map((p) => (
-                            <option key={p.value} value={p.value}>{p.label}</option>
-                          ))}
-                          <option value="custom">Outro</option>
-                        </select>
-                      )}
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="w-14 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => removeSet(set.id)}
-                        className="p-1 text-gray-300 hover:text-red-500 transition-colors"
-                        title="Remover série"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    {/* Dropset sub-rows */}
+                    {set.type === 'dropset' && (set.dropsets ?? []).map((drop, di) => (
+                      <DropsetRow
+                        key={drop.id}
+                        drop={drop}
+                        isLast={di === (set.dropsets?.length ?? 0) - 1}
+                        config={config}
+                        hasReps={hasReps}
+                        isRange={isRange}
+                        onUpdate={(field, val) => updateDropset(set.id, drop.id, field, val)}
+                        onRemove={() => removeDropset(set.id, drop.id)}
+                        onAdd={() => addDropset(set.id)}
+                      />
+                    ))}
                   </motion.div>
                 ))}
               </AnimatePresence>

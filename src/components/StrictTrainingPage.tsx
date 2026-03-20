@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   Play,
   Pause,
@@ -16,9 +16,11 @@ import {
   Maximize2,
   LayoutList,
   Image,
+  Flame,
+  CornerDownRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { StrictExercise } from '../types/workout';
+import type { StrictExercise, SetType, DropSet } from '../types/workout';
 import type { Media } from '../types/media';
 import { getMediaPreviewUrl } from '../types/media';
 import { MediaPreview } from './MediaPreview';
@@ -28,6 +30,8 @@ import { formatTime, formatElapsed, parseDurationToSeconds } from '../utils/form
 // --- Internal types ---
 interface TrainingSet {
   id: string;
+  type?: SetType;
+  dropsets?: DropSet[];
   reps?: number;
   repsRange?: [number, number];
   weight?: number;
@@ -100,6 +104,8 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     supersetId,
     sets: ex.sets.map((s) => ({
       id: s.id,
+      type: s.type,
+      dropsets: s.dropsets,
       reps: ex.repsMode === 'range' ? undefined : s.reps,
       repsRange: s.repsRange,
       weight: s.weight,
@@ -214,8 +220,9 @@ function buildFocusSteps(
     } else {
       processed.add(i);
       for (let setIdx = 0; setIdx < ex.sets.length; setIdx++) {
+        const set = ex.sets[setIdx];
         const isLastSet = setIdx === ex.sets.length - 1;
-        const restAfter = isLastSet ? 0 : ex.sets[setIdx].rest;
+        const restAfter = isLastSet ? 0 : set.rest;
         steps.push({ exerciseIndex: i, setIndex: setIdx, restAfterStep: restAfter });
       }
     }
@@ -370,12 +377,20 @@ function SetRow({
           className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${
             set.completed
               ? 'bg-green-500 border-green-500 text-white'
-              : 'border-gray-600 text-gray-500 hover:border-gray-400'
+              : set.type === 'warmup'
+                ? 'border-amber-500 text-amber-500 hover:border-amber-400'
+                : set.type === 'dropset'
+                  ? 'border-orange-500 text-orange-500 hover:border-orange-400'
+                  : 'border-gray-600 text-gray-500 hover:border-gray-400'
           }`}
         >
           {set.completed
             ? <Check size={14} strokeWidth={3} />
-            : <span className="text-[11px] font-bold tabular-nums">{setIndex + 1}</span>
+            : set.type === 'warmup'
+              ? <Flame size={12} />
+              : set.type === 'dropset'
+                ? <CornerDownRight size={12} />
+                : <span className="text-[11px] font-bold tabular-nums">{setIndex + 1}</span>
           }
         </button>
       </td>
@@ -452,19 +467,63 @@ function ExerciseCard({
           </thead>
           <tbody>
             {exercise.sets.map((set, si) => (
-              <SetRow
-                key={set.id}
-                set={set}
-                setIndex={si}
-                exerciseType={exercise.type}
-                repsMode={exercise.repsMode}
-                isCurrent={isCurrent && si === currentSetIndex}
-                showWeight={exercise.type !== 'duration' || hasWeight}
-                phase={phase}
-                countdown={isCurrent && si === currentSetIndex ? countdown : null}
-                onToggle={() => onToggleSet(exerciseIndex, si)}
-                onUpdateField={(field, value) => onUpdateSetField(exerciseIndex, si, field, value)}
-              />
+              <Fragment key={set.id}>
+                <SetRow
+                  set={set}
+                  setIndex={si}
+                  exerciseType={exercise.type}
+                  repsMode={exercise.repsMode}
+                  isCurrent={isCurrent && si === currentSetIndex}
+                  showWeight={exercise.type !== 'duration' || hasWeight}
+                  phase={phase}
+                  countdown={isCurrent && si === currentSetIndex ? countdown : null}
+                  onToggle={() => onToggleSet(exerciseIndex, si)}
+                  onUpdateField={(field, value) => onUpdateSetField(exerciseIndex, si, field, value)}
+                />
+                {set.type === 'dropset' && (set.dropsets ?? []).map((drop) => (
+                  <tr key={drop.id} className="border-b border-gray-800/30">
+                    {exercise.type === 'weight_reps' && (
+                      <>
+                        <td className="py-1.5 px-2">
+                          <span className="block w-16 text-center text-sm font-semibold text-gray-400">{drop.weight ?? 0}</span>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <span className="block w-14 text-center text-sm font-semibold text-gray-400">
+                            {exercise.repsMode === 'range' && drop.repsRange
+                              ? `${drop.repsRange[0]}-${drop.repsRange[1]}`
+                              : String(drop.reps ?? 0)}
+                          </span>
+                        </td>
+                      </>
+                    )}
+                    {exercise.type === 'duration' && (
+                      <>
+                        {hasWeight && (
+                          <td className="py-1.5 px-2">
+                            <span className="block w-16 text-center text-sm font-semibold text-gray-400">{drop.weight ?? 0}</span>
+                          </td>
+                        )}
+                        <td className="py-1.5 px-2">
+                          <span className="block text-center text-sm font-semibold text-gray-400">{drop.duration || '00:00'}</span>
+                        </td>
+                      </>
+                    )}
+                    {exercise.type === 'distance' && (
+                      <td className="py-1.5 px-2">
+                        <span className="block w-16 text-center text-sm font-semibold text-gray-400">{drop.distance ?? 0}</span>
+                      </td>
+                    )}
+                    <td className="py-1.5 px-2">
+                      <span className="text-gray-700 text-xs">—</span>
+                    </td>
+                    <td className="py-1.5 pl-2 pr-3">
+                      <span className="w-7 h-7 flex items-center justify-center text-orange-700">
+                        <CornerDownRight size={13} />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -678,12 +737,20 @@ function CompactEditModal({
                 className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                   set.completed
                     ? 'bg-green-500 border-green-500 text-white'
-                    : 'border-gray-600 text-gray-500 hover:border-gray-400'
+                    : set.type === 'warmup'
+                      ? 'border-amber-500 text-amber-500 hover:border-amber-400'
+                      : set.type === 'dropset'
+                        ? 'border-orange-500 text-orange-500 hover:border-orange-400'
+                        : 'border-gray-600 text-gray-500 hover:border-gray-400'
                 }`}
               >
                 {set.completed
                   ? <Check size={14} strokeWidth={3} />
-                  : <span className="text-[11px] font-bold tabular-nums">{si + 1}</span>
+                  : set.type === 'warmup'
+                    ? <Flame size={12} />
+                    : set.type === 'dropset'
+                      ? <CornerDownRight size={12} />
+                      : <span className="text-[11px] font-bold tabular-nums">{si + 1}</span>
                 }
               </button>
             </div>
@@ -988,10 +1055,16 @@ function GuidedView({
             Superset · Exercício {posInSS} de {totalInSS}
           </p>
         )}
-        <p className="text-yellow-400 text-2xl font-bold">
-          {ss
-            ? `Round ${setIdx + 1} de ${ss.rounds}`
-            : `Série ${setIdx + 1} de ${totalSets}`}
+        <p className="text-yellow-400 text-2xl font-bold flex items-center gap-2">
+          {ss ? (
+            `Round ${setIdx + 1} de ${ss.rounds}`
+          ) : currentSet?.type === 'warmup' ? (
+            <><span className="inline-flex items-center gap-1.5 text-amber-400"><Flame size={20} />Aquecimento</span><span className="text-gray-500 text-lg">{setIdx + 1}/{totalSets}</span></>
+          ) : currentSet?.type === 'dropset' ? (
+            <><span className="inline-flex items-center gap-1.5 text-orange-400"><CornerDownRight size={20} />Drop Set</span><span className="text-gray-500 text-lg">Série {setIdx + 1}/{totalSets}</span></>
+          ) : (
+            `Série ${setIdx + 1} de ${totalSets}`
+          )}
         </p>
       </div>
 
@@ -1095,6 +1168,30 @@ function GuidedView({
           )}
         </div>
 
+        {/* Drop list — shown for dropsets */}
+        {currentSet.type === 'dropset' && (currentSet.dropsets ?? []).length > 0 && (
+          <div className="space-y-2">
+            {(currentSet.dropsets ?? []).map((drop, di) => (
+              <div key={drop.id} className="flex items-center gap-3 bg-orange-950/30 border border-orange-800/30 rounded-xl px-4 py-2">
+                <CornerDownRight size={14} className="text-orange-500 shrink-0" />
+                <span className="text-orange-400 text-xs font-semibold uppercase">Drop {di + 1}</span>
+                {currentExercise.type === 'weight_reps' && (
+                  <>
+                    <span className="text-white text-sm font-bold ml-auto">{drop.weight ?? 0}kg</span>
+                    <span className="text-gray-400 text-sm">× {drop.repsRange ? `${drop.repsRange[0]}-${drop.repsRange[1]}` : (drop.reps ?? 0)}</span>
+                  </>
+                )}
+                {currentExercise.type === 'duration' && (
+                  <span className="text-white text-sm font-bold ml-auto">{drop.duration || '—'}</span>
+                )}
+                {currentExercise.type === 'distance' && (
+                  <span className="text-white text-sm font-bold ml-auto">{drop.distance ?? 0}m</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Notes */}
         {currentExercise.notes && (
           <div className="bg-gray-800 rounded-xl p-4">
@@ -1195,7 +1292,9 @@ export function StrictTrainingPage({
     setPhase('work');
     const ex = exercisesRef.current[step.exerciseIndex];
     if (ex?.type === 'duration') {
-      const secs = parseDurationToSeconds(ex.sets[step.setIndex]?.duration || '');
+      const set = ex.sets[step.setIndex];
+      const durationStr = set?.duration || '';
+      const secs = parseDurationToSeconds(durationStr);
       setCountdown(secs > 0 ? secs : null);
     } else {
       setCountdown(null);
@@ -1245,6 +1344,7 @@ export function StrictTrainingPage({
   const completeStep = useCallback(() => {
     if (!currentSet || !currentStep) return;
     setCountdown(null);
+
     setCompletedSetIds((prev) => {
       const next = new Set(prev);
       next.add(currentSet.id);
@@ -1257,6 +1357,7 @@ export function StrictTrainingPage({
           : e
       )
     );
+
     const rest = currentStep.restAfterStep;
     if (rest > 0 && currentStepIdx < focusSteps.length - 1) {
       setPhase('rest');
@@ -1391,7 +1492,6 @@ export function StrictTrainingPage({
     const nextIdx = currentStepIdx + 1;
     if (nextIdx >= focusSteps.length) return 'Finalizar';
 
-    // If currently resting (inter-set), the "next" is the actual next set
     const nextStep = focusSteps[nextIdx];
     const nextEx = exercises[nextStep.exerciseIndex];
 
@@ -1409,7 +1509,7 @@ export function StrictTrainingPage({
     if (phase === 'rest') return 'Pular Descanso';
     if (currentStepIdx >= focusSteps.length - 1) return 'Finalizar';
     return 'Próximo';
-  }, [phase, currentStepIdx, focusSteps.length]);
+  }, [phase, currentStepIdx, focusSteps.length, currentSet, currentStep]);
 
   const hasPrev = currentStepIdx > 0;
   const hasNext = currentStepIdx < focusSteps.length;

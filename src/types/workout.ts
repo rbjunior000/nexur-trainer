@@ -29,8 +29,21 @@ export interface FlexExercise extends Exercise {
 // Strict Workout Types
 export type RepsMode = 'fixed' | 'range';
 
+export type SetType = 'normal' | 'warmup' | 'dropset';
+
+export interface DropSet {
+  id: string;
+  reps?: number;
+  repsRange?: [number, number];
+  weight?: number;
+  duration?: string;
+  distance?: number;
+}
+
 export interface StrictSet {
   id: string;
+  type?: SetType;        // default 'normal' when undefined
+  dropsets?: DropSet[];  // only used when type === 'dropset'
   reps?: number;
   repsRange?: [number, number];
   weight?: number;
