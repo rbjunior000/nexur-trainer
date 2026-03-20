@@ -919,7 +919,13 @@ function SummaryModal({
       acc +
       ex.sets
         .filter((s) => completedSetIds.has(s.id))
-        .reduce((a, s) => a + (s.weight || 0) * (s.reps || 0), 0),
+        .reduce((a, s) => {
+          const mainVol = (s.weight || 0) * (s.reps || 0);
+          const dropsVol = s.type === 'dropset'
+            ? (s.dropsets ?? []).reduce((d, drop) => d + (drop.weight || 0) * (drop.reps || 0), 0)
+            : 0;
+          return a + mainVol + dropsVol;
+        }, 0),
     0
   );
 

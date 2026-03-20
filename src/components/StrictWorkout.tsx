@@ -297,7 +297,7 @@ function FillModal({ onApply, onClose }: { onApply: (form: FillForm) => void; on
   const isDropset = serieType === 'dropset';
 
   const handleApply = () => {
-    onApply({ type, setType: serieType, numSets, repsMode, weight, reps, repsMin, repsMax, duration: durationEnabled ? duration : null, distance, rest: isDropset ? 0 : rest, notes: notes !== '' ? notes : null });
+    onApply({ type, setType: serieType, numSets, repsMode, weight, reps, repsMin, repsMax, duration: durationEnabled ? duration : null, distance, rest, notes: notes !== '' ? notes : null });
   };
 
   const toggleType = (t: ExerciseType) => setType((prev) => prev === t ? null : t);
@@ -596,7 +596,6 @@ export function StrictWorkout({
           if (form.setType !== null) {
             ns.type = form.setType;
             if (form.setType === 'dropset') {
-              ns.rest = 0;
               if (!ns.dropsets || ns.dropsets.length === 0) {
                 ns.dropsets = makeInitialDropsets(ns);
               }
