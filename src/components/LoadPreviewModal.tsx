@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { X, TrendingUp, Clock, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, TrendingUp, Clock, ChevronUp, ChevronDown, CornerDownRight } from 'lucide-react';
 import type { StrictExercise } from '../types/workout';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -27,11 +27,20 @@ function formatDurationLabel(d: string): string {
 
 // ─── Weight / reps ───────────────────────────────────────────────────────────
 
+interface DropLoad {
+  index: number;
+  reps: number;
+  weight: number;
+  total: number;
+}
+
 interface SetLoad {
   index: number;
   reps: number;
   weight: number;
   total: number;
+  isDropset: boolean;
+  drops: DropLoad[];
 }
 
 interface ExerciseLoad {
@@ -51,7 +60,18 @@ function calcExerciseLoads(exercises: StrictExercise[]): ExerciseLoad[] {
             ? Math.round((set.repsRange[0] + set.repsRange[1]) / 2)
             : (set.reps ?? 0);
         const weight = set.weight ?? 0;
-        return { index: i + 1, reps, weight, total: reps * weight };
+        const mainTotal = reps * weight;
+        const drops: DropLoad[] = set.type === 'dropset'
+          ? (set.dropsets ?? []).map((drop, di) => {
+              const dr = ex.repsMode === 'range' && drop.repsRange
+                ? Math.round((drop.repsRange[0] + drop.repsRange[1]) / 2)
+                : (drop.reps ?? 0);
+              const dw = drop.weight ?? 0;
+              return { index: di + 1, reps: dr, weight: dw, total: dr * dw };
+            })
+          : [];
+        const dropsTotal = drops.reduce((s, d) => s + d.total, 0);
+        return { index: i + 1, reps, weight, total: mainTotal + dropsTotal, isDropset: set.type === 'dropset', drops };
       });
       return {
         id: ex.id,
@@ -119,14 +139,24 @@ function WeightCard({ ex }: { ex: ExerciseLoad }) {
       {open && (
         <div className="border-t border-gray-100">
           {ex.sets.map((set) => (
-            <div
-              key={set.index}
-              className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 last:border-b-0"
-            >
-              <span className="text-sm text-gray-500">
-                Série {set.index} · {set.reps} reps × {set.weight} kg
-              </span>
-              <span className="text-sm font-medium text-gray-900">{set.total} kg</span>
+            <div key={set.index} className="border-b border-gray-100 last:border-b-0">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-sm text-gray-500">
+                  {set.isDropset
+                    ? `Série ${set.index} · Drop Set`
+                    : `Série ${set.index} · ${set.reps} reps × ${set.weight} kg`}
+                </span>
+                <span className="text-sm font-medium text-gray-900">{set.total} kg</span>
+              </div>
+              {set.isDropset && set.drops.map((drop) => (
+                <div key={drop.index} className="flex items-center justify-between px-4 py-1.5 bg-orange-50">
+                  <span className="text-xs text-orange-500 flex items-center gap-1.5">
+                    <CornerDownRight size={11} />
+                    Drop {drop.index} · {drop.reps} reps × {drop.weight} kg
+                  </span>
+                  <span className="text-xs font-medium text-orange-700">{drop.total} kg</span>
+                </div>
+              ))}
             </div>
           ))}
           <div className="flex justify-end px-4 py-3">

@@ -603,6 +603,18 @@ export function StrictWorkout({
               ns.dropsets = undefined;
             }
           }
+          // Scale drop weights proportionally when main weight changes on a dropset
+          const isDropset = ns.type === 'dropset' && ns.dropsets && ns.dropsets.length > 0;
+          if (form.weight !== null && isDropset) {
+            const oldWeight = s.weight ?? 0;
+            const newWeight = form.weight;
+            ns.dropsets = (ns.dropsets ?? []).map((drop, di) => {
+              if (oldWeight > 0) {
+                return { ...drop, weight: Math.round(newWeight * ((drop.weight ?? 0) / oldWeight)) };
+              }
+              return { ...drop, weight: Math.round(newWeight * 0.8 ** (di + 1)) };
+            });
+          }
           return ns;
         };
 
