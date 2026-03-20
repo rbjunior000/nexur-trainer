@@ -594,6 +594,7 @@ export function StrictWorkout({
       media2: ex.media2,
       category: ex.category,
       equipment: ex.equipment,
+      orientacoes: ex.orientacoes,
       type: defaultExerciseType,
       repsMode: 'fixed',
       notes: '',

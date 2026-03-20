@@ -28,6 +28,7 @@ interface NexurExercicio {
     descricao_en: string;
     tipoExercicio?: { descricao_pt: string; descricao_en: string };
   } | null;
+  orientacoes: string
 }
 
 interface NexurExercicioItem {
@@ -68,6 +69,7 @@ function parseExercicioItem(item: NexurExercicioItem): LibraryExercise & { id: s
     equipment,
     media1: parseMedia(ex.media1),
     media2: parseMedia(ex.media2),
+    orientacoes: ex.orientacoes ?? '',
   };
 }
 

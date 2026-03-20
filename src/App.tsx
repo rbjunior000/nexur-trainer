@@ -19,6 +19,7 @@ export type LibraryExercise = {
   equipment: string;
   media1: Media | null;
   media2: Media | null;
+  orientacoes?: string;
 };
 
 type Page = 'strict' | 'aerobico' | 'autoplay';

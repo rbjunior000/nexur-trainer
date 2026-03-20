@@ -59,6 +59,7 @@ export function ExerciseListContent({
       equipment: exercise.equipment,
       media1: exercise.media1,
       media2: exercise.media2,
+      orientacoes: exercise.orientacoes,
     });
     setJustAdded(exercise.id);
     setTimeout(() => setJustAdded(null), 1200);

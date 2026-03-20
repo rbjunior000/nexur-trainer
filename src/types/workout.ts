@@ -14,6 +14,7 @@ export interface Exercise {
   media2: Media | null;
   category: string;
   equipment: string;
+  orientacoes?: string;
 }
 
 // Flex Workout Types

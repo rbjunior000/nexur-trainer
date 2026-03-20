@@ -46,6 +46,7 @@ interface TrainingExercise {
   repsMode?: string;
   sets: TrainingSet[];
   notes: string;
+  orientacoes?: string;
   supersetId?: string;
   isRest?: boolean;
   restDuration?: number;
@@ -94,6 +95,7 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
     type: ex.type,
     repsMode: ex.repsMode,
     notes: ex.notes,
+    orientacoes: ex.orientacoes,
     cor: ex.cor,
     supersetId,
     sets: ex.sets.map((s) => ({
@@ -429,9 +431,13 @@ function ExerciseCard({
 
       <div className="p-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <h3 className="text-white font-bold text-lg truncate flex-1">{exercise.name}</h3>
         </div>
+
+        {exercise.orientacoes && (
+          <p className="text-gray-400 text-sm mb-3">{exercise.orientacoes}</p>
+        )}
 
         {/* Set Table */}
         <table className="w-full">
@@ -1094,6 +1100,14 @@ function GuidedView({
           <div className="bg-gray-800 rounded-xl p-4">
             <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Notas</p>
             <p className="text-gray-300 text-sm">{currentExercise.notes}</p>
+          </div>
+        )}
+
+        {/* Orientações */}
+        {currentExercise.orientacoes && (
+          <div className="bg-gray-800 rounded-xl p-4">
+            <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Orientações</p>
+            <p className="text-gray-300 text-sm">{currentExercise.orientacoes}</p>
           </div>
         )}
       </div>
