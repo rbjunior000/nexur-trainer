@@ -148,15 +148,26 @@ function WeightCard({ ex }: { ex: ExerciseLoad }) {
                 </span>
                 <span className="text-sm font-medium text-gray-900">{set.total} kg</span>
               </div>
-              {set.isDropset && set.drops.map((drop) => (
-                <div key={drop.index} className="flex items-center justify-between px-4 py-1.5 bg-orange-50">
-                  <span className="text-xs text-orange-500 flex items-center gap-1.5">
-                    <CornerDownRight size={11} />
-                    Drop {drop.index} · {drop.reps} reps × {drop.weight} kg
-                  </span>
-                  <span className="text-xs font-medium text-orange-700">{drop.total} kg</span>
-                </div>
-              ))}
+              {set.isDropset && (
+                <>
+                  <div className="flex items-center justify-between px-4 py-1.5 bg-orange-50">
+                    <span className="text-xs text-orange-500 flex items-center gap-1.5">
+                      <CornerDownRight size={11} />
+                      Série principal · {set.reps} reps × {set.weight} kg
+                    </span>
+                    <span className="text-xs font-medium text-orange-700">{set.reps * set.weight} kg</span>
+                  </div>
+                  {set.drops.map((drop) => (
+                    <div key={drop.index} className="flex items-center justify-between px-4 py-1.5 bg-orange-50">
+                      <span className="text-xs text-orange-500 flex items-center gap-1.5">
+                        <CornerDownRight size={11} />
+                        Drop {drop.index} · {drop.reps} reps × {drop.weight} kg
+                      </span>
+                      <span className="text-xs font-medium text-orange-700">{drop.total} kg</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           ))}
           <div className="flex justify-end px-4 py-3">

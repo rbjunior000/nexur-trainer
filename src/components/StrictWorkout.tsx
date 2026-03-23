@@ -18,6 +18,7 @@ import {
   X,
   Flame,
   CornerDownRight,
+  ChevronRight,
 } from 'lucide-react';
 import {
   StrictExercise,
@@ -29,6 +30,7 @@ import {
 } from '../types/workout';
 import { getMediaPreviewUrl } from '../types/media';
 import { MediaPreview } from './MediaPreview';
+import { PseBadgeWithPicker } from './PsePicker';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DndContext,
@@ -197,9 +199,8 @@ function ColorBar({
 }
 
 // --- Helpers ---
-let _idCounter = 100;
 function uid() {
-  return String(++_idCounter);
+  return crypto.randomUUID();
 }
 
 function DurationInput({
@@ -239,6 +240,32 @@ function cloneExercise(ex: StrictExercise): StrictExercise {
     supersetWithNext: false,
     sets: ex.sets.map((s) => ({ ...s, id: uid() })),
   };
+}
+
+// --- Mobile card helpers ---
+function fmtDurStr(d?: string): string {
+  if (!d) return '?';
+  const parts = d.split(':').map(Number);
+  const total = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h${m > 0 ? m + 'm' : ''}`;
+  if (m > 0 && s > 0) return `${m}m${s}s`;
+  if (m > 0) return `${m}min`;
+  return `${s}s`;
+}
+
+function summarizeSet(set: StrictSet, type: ExerciseType, repsMode?: 'fixed' | 'range'): string {
+  if (type === 'weight_reps') {
+    const reps = repsMode === 'range' && set.repsRange
+      ? `${set.repsRange[0] ?? 0}-${set.repsRange[1] ?? 0}`
+      : String(set.reps ?? '?');
+    return set.weight ? `${reps}×${set.weight}kg` : reps;
+  }
+  if (type === 'duration') return fmtDurStr(set.duration);
+  if (type === 'distance') return set.distance ? `${set.distance}km` : '?';
+  return '';
 }
 
 // --- Confirm dialog ---
@@ -518,6 +545,27 @@ export function StrictWorkout({
 }) {
   const storageKey = defaultExerciseType === 'duration' ? 'nexur-autoplay-exercises' : 'nexur-strict-exercises';
   const [exercises, setExercises] = useLocalStorage<StrictExercise[]>(storageKey, []);
+
+  // One-time migration: fix duplicate IDs from old _idCounter-based storage
+  useEffect(() => {
+    const seen = new Set<string>();
+    let dirty = false;
+    const fixed = exercises.map((ex) => {
+      let e = ex;
+      if (seen.has(e.id)) { e = { ...e, id: uid() }; dirty = true; }
+      seen.add(e.id);
+      const seenSets = new Set<string>();
+      const fixedSets = e.sets.map((s) => {
+        if (seenSets.has(s.id)) { dirty = true; return { ...s, id: uid() }; }
+        seenSets.add(s.id);
+        return s;
+      });
+      return fixedSets !== e.sets ? { ...e, sets: fixedSets } : e;
+    });
+    if (dirty) setExercises(fixed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFillModal, setShowFillModal] = useState(false);
@@ -1323,6 +1371,140 @@ function makeInitialDropsets(s: { reps?: number; repsRange?: [number, number]; w
   ];
 }
 
+// --- Exercise Type Modal ---
+const TYPE_DETAIL: Record<string, { icon: React.ReactNode; description: string; fields: string[] }> = {
+  weight_reps: {
+    icon: <Dumbbell size={20} />,
+    description: 'Registra peso e repetições por série. Ideal para treinos de força clássicos.',
+    fields: ['Peso (kg)', 'Repetições'],
+  },
+  duration: {
+    icon: <Timer size={20} />,
+    description: 'Registra carga opcional e tempo de execução. Ideal para isométricos e cardio.',
+    fields: ['Carga (kg)', 'Duração (hh:mm:ss)'],
+  },
+  distance: {
+    icon: <Flame size={20} />,
+    description: 'Registra a distância percorrida por série. Ideal para corrida, ciclismo e remo.',
+    fields: ['Distância (km)'],
+  },
+};
+
+function ExerciseTypeModal({
+  open,
+  current,
+  onSelect,
+  onClose,
+}: {
+  open: boolean;
+  current: ExerciseType;
+  onSelect: (type: ExerciseType) => void;
+  onClose: () => void;
+}) {
+  const types = Object.keys(TYPE_CONFIG) as ExerciseType[];
+
+  const cardContent = (type: ExerciseType, isSelected: boolean) => {
+    const tc = TYPE_CONFIG[type];
+    const detail = TYPE_DETAIL[type];
+    return (
+      <button
+        key={type}
+        onClick={() => onSelect(type)}
+        className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+          isSelected
+            ? `${tc.bgColor} ${tc.textColor} border-current`
+            : 'border-gray-100 bg-gray-50 hover:border-gray-200 text-gray-700'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className={isSelected ? '' : 'text-gray-400'}>{detail.icon}</span>
+            <span className="text-sm font-bold">{tc.label}</span>
+          </div>
+          {isSelected && <Check size={16} />}
+        </div>
+        <p className={`text-xs mb-2 ${isSelected ? 'opacity-70' : 'text-gray-500'}`}>{detail.description}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {detail.fields.map((f) => (
+            <span
+              key={f}
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                isSelected ? 'bg-white/60 border-current/20' : 'bg-white border-gray-200 text-gray-500'
+              }`}
+            >
+              {f}
+            </span>
+          ))}
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={onClose}
+          />
+
+          {/* Mobile: bottom sheet */}
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl"
+          >
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+            <div className="px-4 pb-2">
+              <h2 className="text-base font-bold text-gray-900">Tipo de exercício</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Selecione como as séries serão registradas</p>
+            </div>
+            <div className="px-4 pb-8 flex flex-col gap-3">
+              {types.map((type) => cardContent(type, current === type))}
+            </div>
+          </motion.div>
+
+          {/* Desktop: centered modal */}
+          <div className="hidden md:flex fixed inset-0 z-50 items-center justify-center pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 pointer-events-auto"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Tipo de exercício</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Selecione como as séries serão registradas</p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-3">
+                {types.map((type) => cardContent(type, current === type))}
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // --- Exercise Card ---
 function ExerciseCard({
   exercise,
@@ -1358,6 +1540,8 @@ function ExerciseCard({
   const [customRestSetIds, setCustomRestSetIds] = useState<Set<string>>(
     () => new Set(exercise.sets.filter((s) => !REST_PRESET_VALUES.has(s.rest)).map((s) => s.id))
   );
+
+  const [mobileEditOpen, setMobileEditOpen] = useState(false);
 
   const handleTypeChange = (newType: ExerciseType) => {
     const mappedSets = exercise.sets.map((s) => ({ id: s.id, rest: s.rest }));
@@ -1444,17 +1628,47 @@ function ExerciseCard({
 
   return (
     <div className="flex flex-col gap-4 py-4 rounded-lg bg-white">
-      {/* Title row – with inline thumbnail on mobile */}
-      <div className="flex items-center gap-3">
-        <div className="flex gap-1 h-10 flex-shrink-0 md:hidden">
+      {/* Title row */}
+      <div className="flex items-center gap-2">
+        {/* Mobile: tappable card (thumbnail + name + type + sets summary) */}
+        <div className="flex items-stretch gap-1.5 flex-1 min-w-0 md:hidden">
           {!isPartOfSuperset && <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />}
-          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
-            <MediaPreview media={exercise.media1} alt={exercise.name} />
-          </div>
+          <button
+            onClick={() => setMobileEditOpen(true)}
+            className="flex items-start gap-2.5 flex-1 min-w-0 text-left py-0.5"
+          >
+            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+              <MediaPreview media={exercise.media1} alt={exercise.name} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-900 truncate leading-tight">{exercise.name}</p>
+              <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${config.bgColor} ${config.textColor}`}>
+                {config.label}
+              </span>
+              {exercise.sets.length > 0 && (
+                <div className="flex flex-col mt-0.5">
+                  {exercise.sets.slice(0, 5).map((s, i) => {
+                    const label = summarizeSet(s, exercise.type, exercise.repsMode);
+                    if (!label) return null;
+                    return (
+                      <span key={s.id} className="text-[11px] text-gray-500 leading-snug">
+                        <span className="text-gray-300 mr-1">{i + 1}</span>{label}
+                      </span>
+                    );
+                  })}
+                  {exercise.sets.length > 5 && (
+                    <span className="text-[11px] text-gray-400">+{exercise.sets.length - 5} séries</span>
+                  )}
+                </div>
+              )}
+            </div>
+            <ChevronRight size={14} className="text-gray-300 flex-shrink-0 mt-1" />
+          </button>
         </div>
-        <h3 className="text-sm font-bold text-gray-900 truncate flex-1">{exercise.name}</h3>
-        {/* Mobile actions — inline in title row */}
-        <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+        {/* Desktop: just the name */}
+        <h3 className="hidden md:block text-sm font-bold text-gray-900 truncate flex-1">{exercise.name}</h3>
+        {/* Mobile actions — grip + menu */}
+        <div className="flex md:hidden items-center gap-0.5 flex-shrink-0">
           <button
             {...dragHandleProps}
             className="flex items-center justify-center p-2 text-gray-300 cursor-grab hover:text-gray-500 transition-colors touch-none"
@@ -1525,8 +1739,8 @@ function ExerciseCard({
         </div>
       </div>
 
-      {/* Content: form only on mobile, thumbnail + form on md+ */}
-      <div className="flex gap-4">
+      {/* Content: thumbnail + form on md+ */}
+      <div className="hidden md:flex gap-4">
         {/* Thumbnail + color bar – desktop only */}
         <div className="hidden md:flex gap-1 h-36 flex-shrink-0">
           {!isPartOfSuperset && <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />}
@@ -1544,49 +1758,13 @@ function ExerciseCard({
                 {config.label}
               </span>
             ) : (
-              <div className="relative">
-                <button
-                  onClick={() => setIsTypeOpen(!isTypeOpen)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${config.bgColor} ${config.textColor} hover:opacity-80`}
-                >
-                  {config.label}
-                  <ChevronDown size={12} />
-                </button>
-
-                <AnimatePresence>
-                  {isTypeOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setIsTypeOpen(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                        className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-1 overflow-hidden"
-                      >
-                        {(Object.keys(TYPE_CONFIG) as ExerciseType[]).map((type) => {
-                          const typeConfig = TYPE_CONFIG[type];
-                          const isSelected = exercise.type === type;
-                          return (
-                            <button
-                              key={type}
-                              onClick={() => handleTypeChange(type)}
-                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${
-                                isSelected ? 'bg-gray-50 font-medium text-gray-900' : 'text-gray-600'
-                              }`}
-                            >
-                              <span className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${typeConfig.bgColor}`} />
-                                {typeConfig.label}
-                              </span>
-                              {isSelected && <Check size={14} className="text-yellow-500" />}
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
+              <button
+                onClick={() => setIsTypeOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${config.bgColor} ${config.textColor} hover:opacity-80`}
+              >
+                {config.label}
+                <ChevronDown size={12} />
+              </button>
             )}
 
             <span className="text-xs text-gray-300">·</span>
@@ -1649,6 +1827,7 @@ function ExerciseCard({
                   </AnimatePresence>
                 </div>
               )}
+              <div className="w-9 text-[10px] font-bold text-gray-400 uppercase text-center">PSE</div>
               <div className="w-20 text-[10px] font-bold text-gray-400 uppercase text-center flex items-center justify-center gap-1">
                 <Clock size={10} />
                 Descanso
@@ -1743,6 +1922,14 @@ function ExerciseCard({
                           </div>
                         )
                       )}
+
+                      {/* PSE */}
+                      <div className="flex-shrink-0 flex items-center justify-center">
+                        <PseBadgeWithPicker
+                          value={set.pse}
+                          onChange={(v) => updateSet(set.id, 'pse', v)}
+                        />
+                      </div>
 
                       {/* Rest per set */}
                       <div className="w-20 flex-shrink-0">
@@ -1910,6 +2097,343 @@ function ExerciseCard({
         </div>
       </div>
 
+      {/* Mobile Edit Sheet */}
+      <AnimatePresence>
+        {mobileEditOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-40 md:hidden"
+              onClick={() => setMobileEditOpen(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl md:hidden flex flex-col"
+              style={{ maxHeight: '92dvh' }}
+            >
+              {/* Handle bar */}
+              <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+                <div className="w-10 h-1 rounded-full bg-gray-200" />
+              </div>
+
+              {/* Sheet header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  {!isPartOfSuperset && (
+                    <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} placement="below" />
+                  )}
+                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                    <MediaPreview media={exercise.media1} alt={exercise.name} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{exercise.name}</p>
+                    {exercise.equipment && (
+                      <p className="text-xs text-gray-400 truncate">{exercise.equipment}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMobileEditOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Form content */}
+              <div className="overflow-y-auto flex-1 px-4 py-4 flex flex-col gap-y-4">
+                {/* Type Selector */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {lockType ? (
+                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold ${config.bgColor} ${config.textColor}`}>
+                      {config.label}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setIsTypeOpen(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${config.bgColor} ${config.textColor} hover:opacity-80`}
+                    >
+                      {config.label}
+                      <ChevronDown size={12} />
+                    </button>
+                  )}
+                  <span className="text-xs text-gray-300">·</span>
+                  <span className="text-xs text-gray-500">{exercise.equipment}</span>
+                  <span className="text-xs text-gray-300">·</span>
+                  <span className="text-xs text-gray-400">{exercise.sets.length} séries</span>
+                </div>
+
+                {/* Sets Table */}
+                <div>
+                  {/* Header */}
+                  <div className="flex items-end gap-2 mb-1.5 px-1">
+                    <div className="w-8 text-[10px] font-bold text-gray-400 uppercase text-center">#</div>
+                    {config.columns.map((col) => (
+                      <div key={col.key} className="flex-1 text-[10px] font-bold text-gray-400 uppercase text-center">
+                        {col.label}
+                      </div>
+                    ))}
+                    {hasReps && (
+                      <div className="flex-1 relative text-center">
+                        <button
+                          onClick={() => setIsRepsMenuOpen(!isRepsMenuOpen)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase hover:text-gray-600 transition-colors"
+                        >
+                          {isRange ? 'Faixa' : 'Reps'}
+                          <ChevronDown size={10} />
+                        </button>
+                        <AnimatePresence>
+                          {isRepsMenuOpen && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setIsRepsMenuOpen(false)} />
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-20 p-3 space-y-2"
+                              >
+                                <p className="text-xs font-semibold text-gray-700">Opções de Repetições</p>
+                                <button
+                                  onClick={() => { onUpdate({ repsMode: 'fixed' }); setIsRepsMenuOpen(false); }}
+                                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                    !isRange ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  Reps
+                                </button>
+                                <button
+                                  onClick={() => { onUpdate({ repsMode: 'range' }); setIsRepsMenuOpen(false); }}
+                                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                    isRange ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  Faixa de Reps
+                                </button>
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                    <div className="w-9 text-[10px] font-bold text-gray-400 uppercase text-center">PSE</div>
+                    <div className="w-20 text-[10px] font-bold text-gray-400 uppercase text-center flex items-center justify-center gap-1">
+                      <Clock size={10} />
+                      Descanso
+                    </div>
+                    <div className="w-8" />
+                  </div>
+
+                  {/* Set Rows */}
+                  <div className="space-y-1">
+                    <AnimatePresence mode="popLayout">
+                      {exercise.sets.map((set, setIndex) => (
+                        <motion.div
+                          key={set.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 10, height: 0 }}
+                          className="flex flex-col gap-1"
+                        >
+                          <div className={`flex items-center gap-2 p-2 rounded-lg px-1 ${set.type === 'dropset' ? 'bg-orange-50' : set.type === 'warmup' ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                            <SetTypeBadge
+                              set={set}
+                              index={setIndex}
+                              onChangeType={(type) => updateSetType(set.id, type)}
+                            />
+                            {config.columns.map((col) => (
+                              <div key={col.key} className="flex-1 relative">
+                                {col.key === 'duration' ? (
+                                  <DurationInput
+                                    value={(set.duration as string) || ''}
+                                    onChange={(masked) => updateSet(set.id, 'duration', masked)}
+                                    placeholder={col.placeholder}
+                                    className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
+                                  />
+                                ) : (
+                                  <>
+                                    <input
+                                      type={col.type}
+                                      inputMode="decimal"
+                                      value={(set[col.key] as string | number) || ''}
+                                      onChange={(e) => updateSet(set.id, col.key, e.target.value)}
+                                      placeholder={col.placeholder}
+                                      className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                                    />
+                                    {col.suffix && (
+                                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
+                                        {col.suffix}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                            {hasReps && (
+                              isRange ? (
+                                <div className="flex-1 flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.repsRange?.[0] || ''}
+                                    onChange={(e) => {
+                                      const min = Number(e.target.value) || 0;
+                                      const max = set.repsRange?.[1] || 0;
+                                      updateSet(set.id, 'repsRange', [min, max]);
+                                    }}
+                                    placeholder="0"
+                                    className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                                  />
+                                  <span className="text-gray-300 text-sm flex-shrink-0">-</span>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.repsRange?.[1] || ''}
+                                    onChange={(e) => {
+                                      const min = set.repsRange?.[0] || 0;
+                                      const max = Number(e.target.value) || 0;
+                                      updateSet(set.id, 'repsRange', [min, max]);
+                                    }}
+                                    placeholder="0"
+                                    className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex-1">
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.reps || ''}
+                                    onChange={(e) => updateSet(set.id, 'reps', e.target.value)}
+                                    placeholder="0"
+                                    className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+                                  />
+                                </div>
+                              )
+                            )}
+                            {/* PSE */}
+                            <div className="flex-shrink-0 flex items-center justify-center">
+                              <PseBadgeWithPicker
+                                value={set.pse}
+                                onChange={(v) => updateSet(set.id, 'pse', v)}
+                              />
+                            </div>
+                            {/* Rest per set */}
+                            <div className="w-20 flex-shrink-0">
+                              {customRestSetIds.has(set.id) ? (
+                                <div className="relative">
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    value={set.rest || ''}
+                                    onChange={(e) => updateSet(set.id, 'rest', Number(e.target.value) || 0)}
+                                    placeholder="45"
+                                    className="w-full text-center bg-white border border-yellow-400 rounded-lg py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all pr-7"
+                                  />
+                                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 pointer-events-none">seg</span>
+                                </div>
+                              ) : (
+                                <select
+                                  value={REST_PRESET_VALUES.has(set.rest) ? set.rest : 'custom'}
+                                  onChange={(e) => {
+                                    if (e.target.value === 'custom') {
+                                      setCustomRestSetIds((prev) => new Set(prev).add(set.id));
+                                    } else {
+                                      updateSet(set.id, 'rest', Number(e.target.value));
+                                      setCustomRestSetIds((prev) => {
+                                        const next = new Set(prev);
+                                        next.delete(set.id);
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-xs font-medium text-gray-600 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all appearance-none cursor-pointer"
+                                >
+                                  {REST_PRESETS.map((p) => (
+                                    <option key={p.value} value={p.value}>{p.label}</option>
+                                  ))}
+                                  <option value="custom">Outro</option>
+                                </select>
+                              )}
+                            </div>
+                            {/* Remove set */}
+                            <div className="w-8 flex items-center justify-center flex-shrink-0">
+                              <button
+                                onClick={() => removeSet(set.id)}
+                                className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Dropset sub-rows */}
+                          {set.type === 'dropset' && (set.dropsets ?? []).map((drop, di) => (
+                            <DropsetRow
+                              key={drop.id}
+                              drop={drop}
+                              isLast={di === (set.dropsets?.length ?? 0) - 1}
+                              config={config}
+                              hasReps={hasReps}
+                              isRange={isRange}
+                              onUpdate={(field, val) => updateDropset(set.id, drop.id, field, val)}
+                              onRemove={() => removeDropset(set.id, drop.id)}
+                              onAdd={() => addDropset(set.id)}
+                            />
+                          ))}
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+
+                  <button
+                    onClick={addSet}
+                    className="mt-2.5 w-full py-2 flex items-center justify-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 border-dashed"
+                  >
+                    <Plus size={16} />
+                    Adicionar série
+                  </button>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
+                    Observações
+                  </label>
+                  <textarea
+                    value={exercise.notes}
+                    onChange={(e) => onUpdate({ notes: e.target.value })}
+                    placeholder="Adicionar notas sobre este exercício..."
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all resize-none h-20"
+                  />
+                </div>
+              </div>
+
+              {/* Sheet footer */}
+              <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100">
+                <button
+                  onClick={() => setMobileEditOpen(false)}
+                  className="w-full py-3 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors"
+                >
+                  Feito
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <ExerciseTypeModal
+        open={isTypeOpen}
+        current={exercise.type}
+        onSelect={handleTypeChange}
+        onClose={() => setIsTypeOpen(false)}
+      />
     </div>
   );
 }

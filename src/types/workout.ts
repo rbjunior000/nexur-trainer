@@ -50,6 +50,7 @@ export interface StrictSet {
   duration?: string;
   distance?: number;
   rest: number; // seconds (0 = OFF)
+  pse?: number | null;   // Percepção Subjetiva de Esforço (1-10)
 }
 
 export interface StrictExercise extends Exercise {

@@ -25,6 +25,7 @@ import type { Media } from '../types/media';
 import { getMediaPreviewUrl } from '../types/media';
 import { MediaPreview } from './MediaPreview';
 import { MediaCarousel } from './MediaCarousel';
+import { PseBadgeWithPicker } from './PsePicker';
 import { formatTime, formatElapsed, parseDurationToSeconds } from '../utils/formatTime';
 
 // --- Internal types ---
@@ -39,6 +40,7 @@ interface TrainingSet {
   distance?: number;
   rest: number;
   completed: boolean;
+  pse?: number | null;
 }
 
 interface TrainingExercise {
@@ -113,6 +115,7 @@ function toTrainingExercise(ex: StrictExercise, supersetId?: string): TrainingEx
       distance: s.distance,
       rest: s.rest,
       completed: false,
+      pse: s.pse,
     })),
   };
 }
@@ -294,7 +297,7 @@ function SetRow({
   phase: Phase;
   countdown: number | null;
   onToggle: () => void;
-  onUpdateField: (field: keyof TrainingSet, value: number | string) => void;
+  onUpdateField: (field: keyof TrainingSet, value: number | string | null) => void;
 }) {
   const isCountingRest = isCurrent && set.completed && phase === 'rest' && countdown !== null && countdown > 0;
 
@@ -364,6 +367,13 @@ function SetRow({
         </td>
       )}
 
+      <td className="py-2.5 px-1">
+        <PseBadgeWithPicker
+          value={set.pse}
+          onChange={(v) => onUpdateField('pse', v)}
+        />
+      </td>
+
       <td className="py-2.5 px-2">
         <span className={`flex items-center gap-1 text-sm ${isCountingRest ? 'text-yellow-400 animate-pulse font-bold' : 'text-gray-400'}`}>
           <Clock size={12} />
@@ -416,17 +426,17 @@ function ExerciseCard({
   phase: Phase;
   countdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
-  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => void;
 }) {
   const isCurrent = exerciseIndex === currentExerciseIndex;
   const hasWeight = exercise.type === 'duration' && exercise.sets.some((s) => (s.weight ?? 0) > 0);
 
   const colHeaders = (() => {
     switch (exercise.type) {
-      case 'weight_reps': return ['Carga', 'Reps', 'Inter', ''];
-      case 'duration': return hasWeight ? ['Carga', 'Duração', 'Inter', ''] : ['Duração', 'Inter', ''];
-      case 'distance': return ['Distância', 'Inter', ''];
-      default: return ['#', 'Carga', 'Reps', 'Inter', ''];
+      case 'weight_reps': return ['Carga', 'Reps', 'PSE', 'Inter', ''];
+      case 'duration': return hasWeight ? ['Carga', 'Duração', 'PSE', 'Inter', ''] : ['Duração', 'PSE', 'Inter', ''];
+      case 'distance': return ['Distância', 'PSE', 'Inter', ''];
+      default: return ['#', 'Carga', 'Reps', 'PSE', 'Inter', ''];
     }
   })();
 
@@ -560,7 +570,7 @@ function SupersetCard({
   phase: Phase;
   countdown: number | null;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
-  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => void;
   onExerciseRef: (exIdx: number, el: HTMLDivElement | null) => void;
 }) {
   return (
@@ -671,7 +681,7 @@ function CompactEditModal({
 }: {
   exercise: TrainingExercise;
   exerciseIndex: number;
-  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => void;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
   onClose: () => void;
 }) {
@@ -829,7 +839,7 @@ function CompactView({
   displayGroups: DisplayGroup[];
   highlightExerciseIndex: number;
   onScrollTo: (idx: number) => void;
-  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => void;
   onToggleSet: (exerciseIndex: number, setIndex: number) => void;
 }) {
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
@@ -994,7 +1004,7 @@ function GuidedView({
   phase: Phase;
   countdown: number | null;
   nextStepLabel: string;
-  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => void;
+  onUpdateSetField: (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => void;
 }) {
   const currentStep = focusSteps[currentStepIdx];
   if (!currentStep) return null;
@@ -1172,6 +1182,18 @@ function GuidedView({
               </div>
             </>
           )}
+        </div>
+
+        {/* PSE */}
+        <div className="bg-gray-800 rounded-xl p-3 flex items-center justify-between gap-3">
+          <div className="text-left">
+            <p className="text-gray-500 text-xs uppercase font-semibold">PSE</p>
+            <p className="text-gray-400 text-xs mt-0.5">Percepção Subjetiva de Esforço</p>
+          </div>
+          <PseBadgeWithPicker
+            value={currentSet.pse}
+            onChange={(v) => onUpdateSetField(currentStep.exerciseIndex, currentStep.setIndex, 'pse', v)}
+          />
         </div>
 
         {/* Drop list — shown for dropsets */}
@@ -1442,7 +1464,7 @@ export function StrictTrainingPage({
 
   // Update set field
   const handleUpdateSetField = useCallback(
-    (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string) => {
+    (exerciseIndex: number, setIndex: number, field: keyof TrainingSet, value: number | string | null) => {
       setExercises((prev) =>
         prev.map((ex, ei) =>
           ei === exerciseIndex
