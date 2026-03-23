@@ -31,6 +31,7 @@ import {
 import { getMediaPreviewUrl } from '../types/media';
 import { MediaPreview } from './MediaPreview';
 import { PseBadgeWithPicker } from './PsePicker';
+import { ExerciseDetailModal } from './ExerciseDetailModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DndContext,
@@ -1542,6 +1543,7 @@ function ExerciseCard({
   );
 
   const [mobileEditOpen, setMobileEditOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const handleTypeChange = (newType: ExerciseType) => {
     const mappedSets = exercise.sets.map((s) => ({ id: s.id, rest: s.rest }));
@@ -1637,9 +1639,12 @@ function ExerciseCard({
             onClick={() => setMobileEditOpen(true)}
             className="flex items-start gap-2.5 flex-1 min-w-0 text-left py-0.5"
           >
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setDetailOpen(true); }}
+              className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 focus:outline-none"
+            >
               <MediaPreview media={exercise.media1} alt={exercise.name} />
-            </div>
+            </button>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-900 truncate leading-tight">{exercise.name}</p>
               <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${config.bgColor} ${config.textColor}`}>
@@ -1666,7 +1671,12 @@ function ExerciseCard({
           </button>
         </div>
         {/* Desktop: just the name */}
-        <h3 className="hidden md:block text-sm font-bold text-gray-900 truncate flex-1">{exercise.name}</h3>
+        <button
+          onClick={() => setDetailOpen(true)}
+          className="hidden md:block text-sm font-bold text-gray-900 truncate flex-1 text-left hover:text-blue-600 transition-colors"
+        >
+          {exercise.name}
+        </button>
         {/* Mobile actions — grip + menu */}
         <div className="flex md:hidden items-center gap-0.5 flex-shrink-0">
           <button
@@ -1744,9 +1754,12 @@ function ExerciseCard({
         {/* Thumbnail + color bar – desktop only */}
         <div className="hidden md:flex gap-1 h-36 flex-shrink-0">
           {!isPartOfSuperset && <ColorBar color={exercise.cor} onChange={(hex) => onUpdate({ cor: hex })} />}
-          <div className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100">
+          <button
+            onClick={() => setDetailOpen(true)}
+            className="w-36 h-36 rounded-lg overflow-hidden bg-gray-100 focus:outline-none hover:opacity-90 transition-opacity"
+          >
             <MediaPreview media={exercise.media1} alt={exercise.name} />
-          </div>
+          </button>
         </div>
 
         {/* Form fields */}
@@ -2434,6 +2447,13 @@ function ExerciseCard({
         onSelect={handleTypeChange}
         onClose={() => setIsTypeOpen(false)}
       />
+
+      {detailOpen && (
+        <ExerciseDetailModal
+          exercise={exercise}
+          onClose={() => setDetailOpen(false)}
+        />
+      )}
     </div>
   );
 }
