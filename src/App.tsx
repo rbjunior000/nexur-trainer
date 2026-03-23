@@ -70,6 +70,10 @@ export function App() {
   const [strictExercises, setStrictExercises] = useState<StrictExercise[]>([]);
   const [autoplayExecuting, setAutoplayExecuting] = useState(false);
   const [autoplayExercises, setAutoplayExercises] = useState<StrictExercise[]>([]);
+
+  // Live exercise lists for the sidebar summary
+  const [strictCurrentExercises, setStrictCurrentExercises] = useState<StrictExercise[]>([]);
+  const [autoplayCurrentExercises, setAutoplayCurrentExercises] = useState<StrictExercise[]>([]);
   const [aerobicExecuting, setAerobicExecuting] = useState(false);
   const isAnyExecuting = strictExecuting || autoplayExecuting || aerobicExecuting;
 
@@ -138,10 +142,9 @@ export function App() {
           <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
             {page === 'strict' && (
               <WorkoutEditor
-                onRegisterAdd={(fn) => {
-                  addExerciseFnRef.current = fn;
-                }}
+                onRegisterAdd={(fn) => { addExerciseFnRef.current = fn; }}
                 onStartTraining={handleStartStrict}
+                onExercisesChange={setStrictCurrentExercises}
               />
             )}
             {page === 'aerobico' && (
@@ -153,10 +156,9 @@ export function App() {
             )}
             {page === 'autoplay' && (
               <WorkoutEditor
-                onRegisterAdd={(fn) => {
-                  autoplayAddFnRef.current = fn;
-                }}
+                onRegisterAdd={(fn) => { autoplayAddFnRef.current = fn; }}
                 onStartTraining={handleStartAutoplay}
+                onExercisesChange={setAutoplayCurrentExercises}
                 defaultExerciseType="duration"
               />
             )}
@@ -166,11 +168,13 @@ export function App() {
           {page === 'strict' && (
             <ExerciseLibrary
               onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
+              workoutExercises={strictCurrentExercises}
             />
           )}
           {page === 'autoplay' && (
             <ExerciseLibrary
               onAddExercise={(ex) => autoplayAddFnRef.current?.(ex)}
+              workoutExercises={autoplayCurrentExercises}
             />
           )}
           {page === 'aerobico' && <AerobicSummary workout={aerobicWorkout} />}

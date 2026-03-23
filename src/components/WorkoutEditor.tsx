@@ -9,10 +9,12 @@ import type { StrictExercise, ExerciseType } from '../types/workout';
 export function WorkoutEditor({
   onRegisterAdd,
   onStartTraining,
+  onExercisesChange,
   defaultExerciseType,
 }: {
   onRegisterAdd?: (fn: (ex: LibraryExercise) => void) => void;
   onStartTraining?: (exercises: StrictExercise[]) => void;
+  onExercisesChange?: (exercises: StrictExercise[]) => void;
   defaultExerciseType?: ExerciseType;
 }) {
   const exercisesRef = useRef<StrictExercise[]>([]);
@@ -27,7 +29,8 @@ export function WorkoutEditor({
 
   const handleExercisesChange = useCallback((exercises: StrictExercise[]) => {
     exercisesRef.current = exercises;
-  }, []);
+    onExercisesChange?.(exercises);
+  }, [onExercisesChange]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-8 py-6">

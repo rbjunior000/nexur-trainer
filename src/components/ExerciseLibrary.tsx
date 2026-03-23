@@ -3,8 +3,10 @@ import { Search, Filter, Plus, Check, Dumbbell, X, Loader2, AlertCircle } from '
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LibraryExercise } from '../App';
 import type { Media } from '../types/media';
+import type { StrictExercise } from '../types/workout';
 import { MediaPreview } from './MediaPreview';
 import { fetchExercises } from '../services/nexurApi';
+import { WorkoutSummary } from './WorkoutSummary';
 
 type ApiExercise = LibraryExercise & { id: string };
 
@@ -170,10 +172,58 @@ export function ExerciseListContent({
   );
 }
 
-export function ExerciseLibrary({
+function SidebarTabs({
   onAddExercise,
+  workoutExercises,
 }: {
   onAddExercise?: (ex: LibraryExercise) => void;
+  workoutExercises?: StrictExercise[];
+}) {
+  const [tab, setTab] = useState<'library' | 'summary'>('library');
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-100 flex-shrink-0">
+        <button
+          onClick={() => setTab('library')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-colors ${
+            tab === 'library'
+              ? 'text-gray-900 border-b-2 border-gray-900'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Exercícios
+        </button>
+        <button
+          onClick={() => setTab('summary')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-colors ${
+            tab === 'summary'
+              ? 'text-gray-900 border-b-2 border-gray-900'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Resumo
+        </button>
+      </div>
+
+      {tab === 'library' ? (
+        <ExerciseListContent onAddExercise={onAddExercise} />
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <WorkoutSummary exercises={workoutExercises ?? []} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ExerciseLibrary({
+  onAddExercise,
+  workoutExercises,
+}: {
+  onAddExercise?: (ex: LibraryExercise) => void;
+  workoutExercises?: StrictExercise[];
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -181,7 +231,7 @@ export function ExerciseLibrary({
     <>
       {/* Desktop sidebar – visible only on xl+ */}
       <div className="w-80 h-screen bg-white border-l border-gray-200 flex-col fixed right-0 top-0 z-20 hidden xl:flex">
-        <ExerciseListContent onAddExercise={onAddExercise} />
+        <SidebarTabs onAddExercise={onAddExercise} workoutExercises={workoutExercises} />
       </div>
 
       {/* Mobile FAB – visible below xl */}
@@ -212,7 +262,7 @@ export function ExerciseLibrary({
               </button>
             </div>
             <div className="flex-1 flex flex-col overflow-hidden">
-              <ExerciseListContent onAddExercise={onAddExercise} />
+              <SidebarTabs onAddExercise={onAddExercise} workoutExercises={workoutExercises} />
             </div>
           </motion.div>
         )}

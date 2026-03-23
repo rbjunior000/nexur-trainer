@@ -1,6 +1,7 @@
 import { X, Dumbbell, Tag } from 'lucide-react';
 import type { StrictExercise } from '../types/workout';
 import { MediaPreview } from './MediaPreview';
+import { MuscleMap } from './MuscleMap';
 
 export function ExerciseDetailModal({
   exercise,
@@ -65,6 +66,9 @@ export function ExerciseDetailModal({
               )}
             </div>
           )}
+
+          {/* Muscle map */}
+          <MuscleMap category={exercise.category} />
 
           {/* Orientações */}
           {exercise.orientacoes && (
