@@ -76,7 +76,7 @@ export function WorkoutEditor({
                   className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors"
                 >
                   <BarChart2 size={16} />
-                  Carga
+                  Resumo
                 </button>
                 <button
                   onClick={() => bulkToggleFnRef.current?.()}

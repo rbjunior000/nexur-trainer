@@ -210,7 +210,7 @@ function SidebarTabs({
       {tab === 'library' ? (
         <ExerciseListContent onAddExercise={onAddExercise} />
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-4">
           <WorkoutSummary exercises={workoutExercises ?? []} />
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, TrendingUp, Clock, ChevronUp, ChevronDown, CornerDownRight } from 'lucide-react';
 import type { StrictExercise } from '../types/workout';
+import { WorkoutSummary } from './WorkoutSummary';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -219,6 +220,65 @@ function DurationCard({ ex }: { ex: ExerciseDuration }) {
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
+function CargaContent({ exercises }: { exercises: StrictExercise[] }) {
+  const exerciseLoads    = useMemo(() => calcExerciseLoads(exercises),     [exercises]);
+  const exerciseDurations = useMemo(() => calcExerciseDurations(exercises), [exercises]);
+  const grandTotalKg   = useMemo(() => exerciseLoads.reduce((s, e) => s + e.total, 0),        [exerciseLoads]);
+  const grandTotalSecs = useMemo(() => exerciseDurations.reduce((s, e) => s + e.totalSecs, 0), [exerciseDurations]);
+
+  const hasWeight = exerciseLoads.length > 0;
+  const hasTime   = exerciseDurations.length > 0;
+  const hasAny    = hasWeight || hasTime;
+
+  return (
+    <div className="space-y-4">
+      <div className={hasWeight && hasTime ? 'grid grid-cols-2 gap-3' : ''}>
+        {hasWeight && (
+          <div className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+              <TrendingUp size={14} /> Carga total
+            </div>
+            <div>
+              <span className="text-3xl font-bold text-gray-900">{grandTotalKg}</span>
+              <span className="text-base text-gray-500 ml-1">kg</span>
+            </div>
+            <span className="self-start bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+              {exerciseLoads.length} {exerciseLoads.length === 1 ? 'exercício' : 'exercícios'}
+            </span>
+          </div>
+        )}
+        {hasTime && (
+          <div className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+              <Clock size={14} /> Tempo total
+            </div>
+            <div>
+              <span className="text-3xl font-bold text-gray-900">{formatSecs(grandTotalSecs)}</span>
+            </div>
+            <span className="self-start bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+              {exerciseDurations.length} {exerciseDurations.length === 1 ? 'exercício' : 'exercícios'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {hasAny ? (
+        <>
+          <p className="text-sm text-gray-500">Detalhamento por exercício</p>
+          <div className="space-y-3">
+            {exerciseLoads.map((ex)       => <WeightCard   key={ex.id} ex={ex} />)}
+            {exerciseDurations.map((ex)   => <DurationCard key={ex.id} ex={ex} />)}
+          </div>
+        </>
+      ) : (
+        <p className="text-center text-gray-400 py-8 text-sm">
+          Nenhum exercício com carga ou duração configurada.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function LoadPreviewModal({
   exercises,
   onClose,
@@ -226,21 +286,7 @@ export function LoadPreviewModal({
   exercises: StrictExercise[];
   onClose: () => void;
 }) {
-  const exerciseLoads = useMemo(() => calcExerciseLoads(exercises), [exercises]);
-  const exerciseDurations = useMemo(() => calcExerciseDurations(exercises), [exercises]);
-
-  const grandTotalKg = useMemo(
-    () => exerciseLoads.reduce((sum, ex) => sum + ex.total, 0),
-    [exerciseLoads],
-  );
-  const grandTotalSecs = useMemo(
-    () => exerciseDurations.reduce((sum, ex) => sum + ex.totalSecs, 0),
-    [exerciseDurations],
-  );
-
-  const hasWeight = exerciseLoads.length > 0;
-  const hasTime = exerciseDurations.length > 0;
-  const hasAny = hasWeight || hasTime;
+  const [tab, setTab] = useState<'resumo' | 'carga'>('resumo');
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center">
@@ -248,68 +294,36 @@ export function LoadPreviewModal({
       <div className="relative bg-white w-full sm:max-w-xl sm:rounded-2xl sm:max-h-[90vh] h-full sm:h-auto flex flex-col shadow-xl">
 
         {/* Header */}
-        <div className="flex items-start justify-between px-5 pt-5 pb-3 flex-shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Preview de Carga</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Estimativa de carga calculada</p>
-          </div>
+        <div className="flex items-start justify-between px-5 pt-5 pb-0 flex-shrink-0">
+          <h2 className="text-xl font-bold text-gray-900">Resumo do Treino</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors mt-0.5">
             <X size={20} />
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 mt-3 px-5 flex-shrink-0">
+          {(['resumo', 'carga'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`mr-6 pb-2.5 text-sm font-semibold capitalize transition-colors border-b-2 ${
+                tab === t
+                  ? 'text-gray-900 border-gray-900'
+                  : 'text-gray-400 border-transparent hover:text-gray-600'
+              }`}
+            >
+              {t === 'resumo' ? 'Resumo' : 'Carga'}
+            </button>
+          ))}
+        </div>
+
         {/* Content */}
-        <div className="overflow-y-auto flex-1 px-5 pb-5 space-y-4">
-
-          {/* Summary cards */}
-          <div className={hasWeight && hasTime ? 'grid grid-cols-2 gap-3' : ''}>
-            {hasWeight && (
-              <div className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-gray-500 text-sm">
-                  <TrendingUp size={14} />
-                  Carga total
-                </div>
-                <div>
-                  <span className="text-3xl font-bold text-gray-900">{grandTotalKg}</span>
-                  <span className="text-base text-gray-500 ml-1">kg</span>
-                </div>
-                <span className="self-start bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-full">
-                  {exerciseLoads.length} {exerciseLoads.length === 1 ? 'exercício' : 'exercícios'}
-                </span>
-              </div>
-            )}
-
-            {hasTime && (
-              <div className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-gray-500 text-sm">
-                  <Clock size={14} />
-                  Tempo total
-                </div>
-                <div>
-                  <span className="text-3xl font-bold text-gray-900">
-                    {formatSecs(grandTotalSecs)}
-                  </span>
-                </div>
-                <span className="self-start bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                  {exerciseDurations.length} {exerciseDurations.length === 1 ? 'exercício' : 'exercícios'}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Breakdown */}
-          {hasAny ? (
-            <>
-              <p className="text-sm text-gray-500">Detalhamento por exercício</p>
-              <div className="space-y-3">
-                {exerciseLoads.map((ex) => <WeightCard key={ex.id} ex={ex} />)}
-                {exerciseDurations.map((ex) => <DurationCard key={ex.id} ex={ex} />)}
-              </div>
-            </>
+        <div className="overflow-y-auto flex-1 px-5 py-5">
+          {tab === 'resumo' ? (
+            <WorkoutSummary exercises={exercises} />
           ) : (
-            <p className="text-center text-gray-400 py-8 text-sm">
-              Nenhum exercício com carga ou duração configurada.
-            </p>
+            <CargaContent exercises={exercises} />
           )}
         </div>
       </div>
