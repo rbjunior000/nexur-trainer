@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   DndContext,
   closestCenter,
@@ -42,7 +43,7 @@ function SortableItem({
   if (exercise.type === 'rest') {
     return (
       <div ref={setNodeRef} style={style}>
-        <RestCard exercise={exercise} />
+        <RestCard exercise={exercise} dragHandleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLButtonElement>} />
       </div>
     );
   }
