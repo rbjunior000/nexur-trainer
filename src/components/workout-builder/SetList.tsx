@@ -97,9 +97,12 @@ export function SetList({ exercise }: SetListProps) {
               exerciseType={exercise.type}
               repsMode={exercise.repsMode}
               onUpdate={(field, value) => updateSet(exercise.id, set.id, field, value)}
-              onUpdateType={(type: SetType) =>
-                updateSet(exercise.id, set.id, 'type', type)
-              }
+              onUpdateType={(type: SetType) => {
+                updateSet(exercise.id, set.id, 'type', type);
+                if (type === 'dropset' && (set.dropsets ?? []).length === 0) {
+                  addDropset(exercise.id, set.id);
+                }
+              }}
               onRemove={() => removeSet(exercise.id, set.id)}
               onAddDropset={() => addDropset(exercise.id, set.id)}
               onRemoveDropset={(dropId) => removeDropset(exercise.id, set.id, dropId)}
