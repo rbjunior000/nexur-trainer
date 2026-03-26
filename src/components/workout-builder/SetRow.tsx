@@ -104,7 +104,7 @@ export function SetRow({
             value={set.duration || '00:00'}
             onAccept={(val: string) => onUpdate('duration', val)}
             inputMode="numeric"
-            className="flex-1 text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
+            className="flex-1 min-w-0 w-0 text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all tabular-nums"
           />
         )}
 
@@ -150,7 +150,7 @@ export function SetRow({
         </div>
 
         {/* Rest */}
-        <div className="w-20 flex-shrink-0">
+        <div className="w-16 flex-shrink-0">
           {customRest ? (
             <div className="relative">
               <input
@@ -184,13 +184,15 @@ export function SetRow({
                   {p.label}
                 </option>
               ))}
-              <option value="custom">Outro</option>
+              <option value="custom">
+                {REST_PRESET_VALUES.has(set.rest) ? 'Outro' : `${set.rest}s`}
+              </option>
             </select>
           )}
         </div>
 
         {/* Actions */}
-        <div className="w-14 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+        <div className="w-8 flex items-center justify-center gap-0.5 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <button
             type="button"
             onClick={onRemove}

@@ -80,7 +80,7 @@ export function SetList({ exercise }: SetListProps) {
         )}
 
         <div className="w-9 text-[10px] font-bold text-gray-400 uppercase text-center">PSE</div>
-        <div className="w-20 text-[10px] font-bold text-gray-400 uppercase text-center">
+        <div className="w-16 text-[10px] font-bold text-gray-400 uppercase text-center">
           Descanso
         </div>
         <div className="w-14" />
