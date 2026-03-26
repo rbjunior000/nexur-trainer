@@ -35,7 +35,6 @@ export function DropsetRow({
           <NumberInput
             value={drop.weight}
             onChange={(v) => onUpdate('weight', v)}
-            suffix="kg"
             className="flex-1"
             inputMode="decimal"
           />
@@ -79,7 +78,6 @@ export function DropsetRow({
           <NumberInput
             value={drop.weight}
             onChange={(v) => onUpdate('weight', v)}
-            suffix="kg"
             className="flex-1"
             inputMode="decimal"
           />
@@ -103,7 +101,6 @@ export function DropsetRow({
         <NumberInput
           value={drop.distance}
           onChange={(v) => onUpdate('distance', v)}
-          suffix="km"
           className="flex-1"
           inputMode="decimal"
         />
