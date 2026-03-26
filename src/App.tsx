@@ -1,14 +1,12 @@
 import { useRef, useState, useEffect } from 'react';
-import { useLocalStorage } from './hooks/useLocalStorage';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
-import { WorkoutEditor } from './components/WorkoutEditor';
-import { AerobicEditor } from './components/AerobicEditor';
 import { AerobicSummary } from './components/AerobicSummary';
-import { StrictTrainingPage } from './components/StrictTrainingPage';
-import { AerobicExecutionPage } from './components/AerobicExecutionPage';
-import { DEFAULT_BLOCKS } from './types/aerobic';
+import { WorkoutBuilderPage } from './components/workout-builder/WorkoutBuilderPage';
+import { TrainingSessionPage } from './components/training-session/TrainingSessionPage';
+import { AerobicBuilderPage } from './components/aerobic-builder/AerobicBuilderPage';
+import { AerobicSessionPage } from './components/aerobic-session/AerobicSessionPage';
 import type { AerobicWorkout } from './types/aerobic';
 import type { StrictExercise } from './types/workout';
 import type { Media } from './types/media';
@@ -49,65 +47,46 @@ function useHashRoute(): [Page, (p: Page) => void] {
 
 export function App() {
   const [page] = useHashRoute();
-  const addExerciseFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Autoplay add function ref (reuses strict interface with duration)
+  // Refs for "add exercise from library" functions
+  const addExerciseFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
   const autoplayAddFnRef = useRef<((ex: LibraryExercise) => void) | null>(null);
 
-  // Shared aerobic workout state
-  const [aerobicWorkout, setAerobicWorkout] = useLocalStorage<AerobicWorkout>('nexur-aerobic-workout', {
-    workoutName: 'Novo Treino Aerobico',
-    workoutStartDate: '',
-    workoutEndDate: '',
-    workoutDescription: '',
-    sport: 'running',
-    blocks: DEFAULT_BLOCKS,
-  });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // --- Execution state ---
+  // Live exercise lists (for ExerciseLibrary sidebar)
+  const [strictCurrentExercises, setStrictCurrentExercises] = useState<StrictExercise[]>([]);
+  const [autoplayCurrentExercises, setAutoplayCurrentExercises] = useState<StrictExercise[]>([]);
+
+  // Aerobic workout (kept in App for summary sidebar + execution handoff)
+  const [aerobicWorkout, setAerobicWorkout] = useState<AerobicWorkout | null>(null);
+
+  // Execution state
   const [strictExecuting, setStrictExecuting] = useState(false);
   const [strictExercises, setStrictExercises] = useState<StrictExercise[]>([]);
   const [autoplayExecuting, setAutoplayExecuting] = useState(false);
   const [autoplayExercises, setAutoplayExercises] = useState<StrictExercise[]>([]);
-
-  // Live exercise lists for the sidebar summary
-  const [strictCurrentExercises, setStrictCurrentExercises] = useState<StrictExercise[]>([]);
-  const [autoplayCurrentExercises, setAutoplayCurrentExercises] = useState<StrictExercise[]>([]);
   const [aerobicExecuting, setAerobicExecuting] = useState(false);
+
   const isAnyExecuting = strictExecuting || autoplayExecuting || aerobicExecuting;
-
-  // --- Execution handlers ---
-  const handleStartStrict = (exercises: StrictExercise[]) => {
-    setStrictExercises(exercises);
-    setStrictExecuting(true);
-  };
-
-  const handleStartAutoplay = (exercises: StrictExercise[]) => {
-    setAutoplayExercises(exercises);
-    setAutoplayExecuting(true);
-  };
-
-  const handleStartAerobic = () => {
-    setAerobicExecuting(true);
-  };
 
   return (
     <div className="min-h-screen bg-white flex overflow-x-hidden">
-      {/* Sidebar: hidden on mobile during execution */}
+      {/* Sidebar */}
       {!isAnyExecuting && (
         <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
-      {isAnyExecuting && strictExecuting ? null : isAnyExecuting && (
+      {isAnyExecuting && !strictExecuting && (
         <div className="hidden md:block">
           <Sidebar mobileOpen={false} onClose={() => {}} />
         </div>
       )}
 
-      {/* Mobile hamburger button - hidden during execution */}
+      {/* Mobile hamburger */}
       {!isAnyExecuting && (
         <button
           onClick={() => setSidebarOpen(true)}
+          aria-label="Abrir menu"
           className="fixed top-4 left-4 z-30 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm text-gray-600 md:hidden"
         >
           <Menu size={20} />
@@ -116,21 +95,23 @@ export function App() {
 
       {/* Main content */}
       {isAnyExecuting ? (
-        <main className="flex-1 min-w-0 ml-0 md:ml-0 transition-all duration-300">
+        <main className="flex-1 min-w-0">
           {strictExecuting && (
-            <StrictTrainingPage
+            <TrainingSessionPage
               sourceExercises={strictExercises}
+              workoutName="Treino Strict"
               onBack={() => setStrictExecuting(false)}
             />
           )}
           {autoplayExecuting && (
-            <StrictTrainingPage
+            <TrainingSessionPage
               sourceExercises={autoplayExercises}
+              workoutName="Treino Autoplay"
               onBack={() => setAutoplayExecuting(false)}
             />
           )}
-          {aerobicExecuting && (
-            <AerobicExecutionPage
+          {aerobicExecuting && aerobicWorkout && (
+            <AerobicSessionPage
               workout={aerobicWorkout}
               onBack={() => setAerobicExecuting(false)}
               onFinish={() => setAerobicExecuting(false)}
@@ -141,30 +122,37 @@ export function App() {
         <>
           <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
             {page === 'strict' && (
-              <WorkoutEditor
+              <WorkoutBuilderPage
+                storageKey="nexur-strict-exercises"
                 onRegisterAdd={(fn) => { addExerciseFnRef.current = fn; }}
-                onStartTraining={handleStartStrict}
+                onStartTraining={(exercises) => {
+                  setStrictExercises(exercises);
+                  setStrictExecuting(true);
+                }}
                 onExercisesChange={setStrictCurrentExercises}
               />
             )}
-            {page === 'aerobico' && (
-              <AerobicEditor
-                workout={aerobicWorkout}
-                setWorkout={setAerobicWorkout}
-                onStartTraining={handleStartAerobic}
+            {page === 'autoplay' && (
+              <WorkoutBuilderPage
+                storageKey="nexur-autoplay-exercises"
+                lockType="duration"
+                onRegisterAdd={(fn) => { autoplayAddFnRef.current = fn; }}
+                onStartTraining={(exercises) => {
+                  setAutoplayExercises(exercises);
+                  setAutoplayExecuting(true);
+                }}
+                onExercisesChange={setAutoplayCurrentExercises}
               />
             )}
-            {page === 'autoplay' && (
-              <WorkoutEditor
-                onRegisterAdd={(fn) => { autoplayAddFnRef.current = fn; }}
-                onStartTraining={handleStartAutoplay}
-                onExercisesChange={setAutoplayCurrentExercises}
-                defaultExerciseType="duration"
+            {page === 'aerobico' && (
+              <AerobicBuilderPage
+                onStartTraining={() => setAerobicExecuting(true)}
+                onWorkoutChange={setAerobicWorkout}
               />
             )}
           </main>
 
-          {/* Right sidebar changes per page */}
+          {/* Right sidebar */}
           {page === 'strict' && (
             <ExerciseLibrary
               onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
@@ -177,7 +165,9 @@ export function App() {
               workoutExercises={autoplayCurrentExercises}
             />
           )}
-          {page === 'aerobico' && <AerobicSummary workout={aerobicWorkout} />}
+          {page === 'aerobico' && aerobicWorkout && (
+            <AerobicSummary workout={aerobicWorkout} />
+          )}
         </>
       )}
     </div>

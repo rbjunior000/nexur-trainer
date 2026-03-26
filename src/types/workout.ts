@@ -64,6 +64,30 @@ export interface StrictExercise extends Exercise {
 }
 
 let _typeIdCounter = 0;
+
+export function makeStrictExercise(
+  partial: Partial<StrictExercise> & { name: string; type: ExerciseType },
+): StrictExercise {
+  return {
+    id: crypto.randomUUID(),
+    name: partial.name,
+    media1: partial.media1 ?? null,
+    media2: partial.media2 ?? null,
+    category: partial.category ?? '',
+    equipment: partial.equipment ?? '',
+    orientacoes: partial.orientacoes,
+    type: partial.type,
+    repsMode: partial.repsMode ?? 'fixed',
+    sets: partial.sets ?? [
+      { id: crypto.randomUUID(), type: 'normal', reps: 10, weight: 0, rest: 60, pse: null },
+    ],
+    restDuration: partial.restDuration,
+    notes: partial.notes ?? '',
+    supersetWithNext: partial.supersetWithNext ?? false,
+    cor: partial.cor,
+  };
+}
+
 export function makeRestExercise(duration?: number): StrictExercise {
   return {
     id: `rest_${++_typeIdCounter}_${Date.now()}`,
