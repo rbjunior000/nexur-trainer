@@ -85,7 +85,7 @@ const TYPE_CONFIG: Record<string, ExerciseTypeConfig & { hasReps?: boolean }> = 
     textColor: 'text-teal-700',
     columns: [
       { key: 'weight', label: 'Carga', type: 'number', placeholder: '0', suffix: 'kg' },
-      { key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00:00' },
+      { key: 'duration', label: 'Duração', type: 'text', placeholder: '00:00' },
     ],
   },
   distance: {
@@ -216,17 +216,16 @@ function DurationInput({
 }) {
   return (
     <IMaskInput
-      mask="HH:MM:SS"
+      mask="MM:SS"
       blocks={{
-        HH: { mask: IMask.MaskedRange, from: 0, to: 23, maxLength: 2, placeholderChar: '0' },
-        MM: { mask: IMask.MaskedRange, from: 0, to: 59, maxLength: 2, placeholderChar: '0' },
+        MM: { mask: IMask.MaskedRange, from: 0, to: 99, maxLength: 2, placeholderChar: '0' },
         SS: { mask: IMask.MaskedRange, from: 0, to: 59, maxLength: 2, placeholderChar: '0' },
       }}
       lazy={false}
       overwrite
-      value={value || '00:00:00'}
+      value={value || '00:00'}
       onAccept={(val: string) => onChange(val)}
-      placeholder="00:00:00"
+      placeholder="00:00"
       inputMode="numeric"
       className={className}
     />
@@ -1291,11 +1290,6 @@ function DropsetRow({ drop, isLast, config, hasReps, isRange, onUpdate, onRemove
                 placeholder={col.placeholder}
                 className="w-full text-center bg-white border border-orange-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
               />
-              {col.suffix && (
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
-                  {col.suffix}
-                </span>
-              )}
             </>
           )}
         </div>
@@ -1795,7 +1789,7 @@ function ExerciseCard({
               </div>
               {config.columns.map((col) => (
                 <div key={col.key} className="flex-1 text-[10px] font-bold text-gray-400 uppercase text-center">
-                  {col.label}
+                  {col.label}{col.suffix ? ` (${col.suffix})` : ''}
                 </div>
               ))}
               {hasReps && (
@@ -1885,11 +1879,6 @@ function ExerciseCard({
                                 placeholder={col.placeholder}
                                 className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
                               />
-                              {col.suffix && (
-                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
-                                  {col.suffix}
-                                </span>
-                              )}
                             </>
                           )}
                         </div>
@@ -2188,7 +2177,7 @@ function ExerciseCard({
                     <div className="w-8 text-[10px] font-bold text-gray-400 uppercase text-center">#</div>
                     {config.columns.map((col) => (
                       <div key={col.key} className="flex-1 text-[10px] font-bold text-gray-400 uppercase text-center">
-                        {col.label}
+                        {col.label}{col.suffix ? ` (${col.suffix})` : ''}
                       </div>
                     ))}
                     {hasReps && (
@@ -2277,11 +2266,6 @@ function ExerciseCard({
                                       placeholder={col.placeholder}
                                       className="w-full text-center bg-white border border-gray-200 rounded-lg py-2 text-sm font-medium focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
                                     />
-                                    {col.suffix && (
-                                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
-                                        {col.suffix}
-                                      </span>
-                                    )}
                                   </>
                                 )}
                               </div>

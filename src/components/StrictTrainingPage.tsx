@@ -433,9 +433,9 @@ function ExerciseCard({
 
   const colHeaders = (() => {
     switch (exercise.type) {
-      case 'weight_reps': return ['Carga', 'Reps', 'PSE', 'Inter', ''];
-      case 'duration': return hasWeight ? ['Carga', 'Duração', 'PSE', 'Inter', ''] : ['Duração', 'PSE', 'Inter', ''];
-      case 'distance': return ['Distância', 'PSE', 'Inter', ''];
+      case 'weight_reps': return ['Carga (kg)', 'Reps', 'PSE', 'Inter', ''];
+      case 'duration': return hasWeight ? ['Carga (kg)', 'Duração', 'PSE', 'Inter', ''] : ['Duração', 'PSE', 'Inter', ''];
+      case 'distance': return ['Distância (km)', 'PSE', 'Inter', ''];
       default: return ['#', 'Carga', 'Reps', 'PSE', 'Inter', ''];
     }
   })();
@@ -1107,7 +1107,7 @@ function GuidedView({
           {currentExercise.type === 'weight_reps' && (
             <>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
-                <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga</p>
+                <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga (kg)</p>
                 <input
                   type="number"
                   value={currentSet.weight ?? 0}
@@ -1145,7 +1145,7 @@ function GuidedView({
             <>
               {hasWeight && (
                 <div className="bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga</p>
+                  <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Carga (kg)</p>
                   <input
                     type="number"
                     value={currentSet.weight ?? 0}
@@ -1168,7 +1168,7 @@ function GuidedView({
           {currentExercise.type === 'distance' && (
             <>
               <div className="bg-gray-800 rounded-xl p-3 text-center col-span-2">
-                <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Distância</p>
+                <p className="text-gray-500 text-xs uppercase font-semibold mb-1">Distância (km)</p>
                 <input
                   type="number"
                   value={currentSet.distance ?? 0}
