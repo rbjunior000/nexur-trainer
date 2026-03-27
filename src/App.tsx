@@ -7,6 +7,7 @@ import { WorkoutBuilderPage } from './components/workout-builder/WorkoutBuilderP
 import { TrainingSessionPage } from './components/training-session/TrainingSessionPage';
 import { AerobicBuilderPage } from './components/aerobic-builder/AerobicBuilderPage';
 import { AerobicSessionPage } from './components/aerobic-session/AerobicSessionPage';
+import { Dialog, DialogContent } from './components/ui/dialog';
 import type { AerobicWorkout } from './types/aerobic';
 import type { StrictExercise } from './types/workout';
 import type { Media } from './types/media';
@@ -68,108 +69,117 @@ export function App() {
   const [autoplayExercises, setAutoplayExercises] = useState<StrictExercise[]>([]);
   const [aerobicExecuting, setAerobicExecuting] = useState(false);
 
-  const isAnyExecuting = strictExecuting || autoplayExecuting || aerobicExecuting;
-
   return (
     <div className="min-h-screen bg-white flex overflow-x-hidden">
       {/* Sidebar */}
-      {!isAnyExecuting && (
-        <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      )}
-      {isAnyExecuting && !strictExecuting && (
-        <div className="hidden md:block">
-          <Sidebar mobileOpen={false} onClose={() => {}} />
-        </div>
-      )}
+      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Mobile hamburger */}
-      {!isAnyExecuting && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Abrir menu"
-          className="fixed top-4 left-4 z-30 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm text-gray-600 md:hidden"
-        >
-          <Menu size={20} />
-        </button>
-      )}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Abrir menu"
+        className="fixed top-4 left-4 z-30 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm text-gray-600 md:hidden"
+      >
+        <Menu size={20} />
+      </button>
 
       {/* Main content */}
-      {isAnyExecuting ? (
-        <main className="flex-1 min-w-0">
-          {strictExecuting && (
-            <TrainingSessionPage
-              sourceExercises={strictExercises}
-              workoutName="Treino Strict"
-              onBack={() => setStrictExecuting(false)}
-            />
-          )}
-          {autoplayExecuting && (
-            <TrainingSessionPage
-              sourceExercises={autoplayExercises}
-              workoutName="Treino Autoplay"
-              onBack={() => setAutoplayExecuting(false)}
-            />
-          )}
-          {aerobicExecuting && aerobicWorkout && (
+      <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
+        {page === 'strict' && (
+          <WorkoutBuilderPage
+            storageKey="nexur-strict-exercises"
+            onRegisterAdd={(fn) => { addExerciseFnRef.current = fn; }}
+            onStartTraining={(exercises) => {
+              setStrictExercises(exercises);
+              setStrictExecuting(true);
+            }}
+            onExercisesChange={setStrictCurrentExercises}
+          />
+        )}
+        {page === 'autoplay' && (
+          <WorkoutBuilderPage
+            storageKey="nexur-autoplay-exercises"
+            lockType="duration"
+            onRegisterAdd={(fn) => { autoplayAddFnRef.current = fn; }}
+            onStartTraining={(exercises) => {
+              setAutoplayExercises(exercises);
+              setAutoplayExecuting(true);
+            }}
+            onExercisesChange={setAutoplayCurrentExercises}
+          />
+        )}
+        {page === 'aerobico' && (
+          <AerobicBuilderPage
+            onStartTraining={() => setAerobicExecuting(true)}
+            onWorkoutChange={setAerobicWorkout}
+          />
+        )}
+      </main>
+
+      {/* Right sidebar */}
+      {page === 'strict' && (
+        <ExerciseLibrary
+          onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
+          workoutExercises={strictCurrentExercises}
+        />
+      )}
+      {page === 'autoplay' && (
+        <ExerciseLibrary
+          onAddExercise={(ex) => autoplayAddFnRef.current?.(ex)}
+          workoutExercises={autoplayCurrentExercises}
+        />
+      )}
+      {page === 'aerobico' && aerobicWorkout && (
+        <AerobicSummary workout={aerobicWorkout} />
+      )}
+
+      {/* Training session modals */}
+      <Dialog open={strictExecuting} onOpenChange={(open) => !open && setStrictExecuting(false)}>
+        <DialogContent
+          className="inset-0 top-0 left-0 w-full h-full max-w-none rounded-none p-0 translate-x-0 translate-y-0 bg-transparent overflow-auto"
+          showClose={false}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <TrainingSessionPage
+            sourceExercises={strictExercises}
+            workoutName="Treino Strict"
+            onBack={() => setStrictExecuting(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={autoplayExecuting} onOpenChange={(open) => !open && setAutoplayExecuting(false)}>
+        <DialogContent
+          className="inset-0 top-0 left-0 w-full h-full max-w-none rounded-none p-0 translate-x-0 translate-y-0 bg-transparent overflow-auto"
+          showClose={false}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <TrainingSessionPage
+            sourceExercises={autoplayExercises}
+            workoutName="Treino Autoplay"
+            onBack={() => setAutoplayExecuting(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={aerobicExecuting} onOpenChange={(open) => !open && setAerobicExecuting(false)}>
+        <DialogContent
+          className="inset-0 top-0 left-0 w-full h-full max-w-none rounded-none p-0 translate-x-0 translate-y-0 bg-transparent overflow-auto"
+          showClose={false}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          {aerobicWorkout && (
             <AerobicSessionPage
               workout={aerobicWorkout}
               onBack={() => setAerobicExecuting(false)}
               onFinish={() => setAerobicExecuting(false)}
             />
           )}
-        </main>
-      ) : (
-        <>
-          <main className="flex-1 min-w-0 ml-0 md:ml-16 mr-0 xl:mr-80 transition-all duration-300">
-            {page === 'strict' && (
-              <WorkoutBuilderPage
-                storageKey="nexur-strict-exercises"
-                onRegisterAdd={(fn) => { addExerciseFnRef.current = fn; }}
-                onStartTraining={(exercises) => {
-                  setStrictExercises(exercises);
-                  setStrictExecuting(true);
-                }}
-                onExercisesChange={setStrictCurrentExercises}
-              />
-            )}
-            {page === 'autoplay' && (
-              <WorkoutBuilderPage
-                storageKey="nexur-autoplay-exercises"
-                lockType="duration"
-                onRegisterAdd={(fn) => { autoplayAddFnRef.current = fn; }}
-                onStartTraining={(exercises) => {
-                  setAutoplayExercises(exercises);
-                  setAutoplayExecuting(true);
-                }}
-                onExercisesChange={setAutoplayCurrentExercises}
-              />
-            )}
-            {page === 'aerobico' && (
-              <AerobicBuilderPage
-                onStartTraining={() => setAerobicExecuting(true)}
-                onWorkoutChange={setAerobicWorkout}
-              />
-            )}
-          </main>
-
-          {/* Right sidebar */}
-          {page === 'strict' && (
-            <ExerciseLibrary
-              onAddExercise={(ex) => addExerciseFnRef.current?.(ex)}
-              workoutExercises={strictCurrentExercises}
-            />
-          )}
-          {page === 'autoplay' && (
-            <ExerciseLibrary
-              onAddExercise={(ex) => autoplayAddFnRef.current?.(ex)}
-              workoutExercises={autoplayCurrentExercises}
-            />
-          )}
-          {page === 'aerobico' && aerobicWorkout && (
-            <AerobicSummary workout={aerobicWorkout} />
-          )}
-        </>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

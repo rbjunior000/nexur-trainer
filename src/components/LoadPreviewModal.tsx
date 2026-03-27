@@ -1,7 +1,13 @@
 import { useState, useMemo } from 'react';
-import { X, TrendingUp, Clock, ChevronUp, ChevronDown, CornerDownRight } from 'lucide-react';
+import { TrendingUp, Clock, ChevronUp, ChevronDown, CornerDownRight } from 'lucide-react';
 import type { StrictExercise } from '../types/workout';
 import { WorkoutSummary } from './WorkoutSummary';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -218,7 +224,7 @@ function DurationCard({ ex }: { ex: ExerciseDuration }) {
   );
 }
 
-// ─── Modal ───────────────────────────────────────────────────────────────────
+// ─── Carga content ────────────────────────────────────────────────────────────
 
 function CargaContent({ exercises }: { exercises: StrictExercise[] }) {
   const exerciseLoads    = useMemo(() => calcExerciseLoads(exercises),     [exercises]);
@@ -266,8 +272,8 @@ function CargaContent({ exercises }: { exercises: StrictExercise[] }) {
         <>
           <p className="text-sm text-gray-500">Detalhamento por exercício</p>
           <div className="space-y-3">
-            {exerciseLoads.map((ex)       => <WeightCard   key={ex.id} ex={ex} />)}
-            {exerciseDurations.map((ex)   => <DurationCard key={ex.id} ex={ex} />)}
+            {exerciseLoads.map((ex)     => <WeightCard   key={ex.id} ex={ex} />)}
+            {exerciseDurations.map((ex) => <DurationCard key={ex.id} ex={ex} />)}
           </div>
         </>
       ) : (
@@ -279,6 +285,8 @@ function CargaContent({ exercises }: { exercises: StrictExercise[] }) {
   );
 }
 
+// ─── Modal ───────────────────────────────────────────────────────────────────
+
 export function LoadPreviewModal({
   exercises,
   onClose,
@@ -289,36 +297,29 @@ export function LoadPreviewModal({
   const [tab, setTab] = useState<'resumo' | 'carga'>('resumo');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white w-full sm:max-w-xl sm:rounded-2xl sm:max-h-[90vh] h-full sm:h-auto flex flex-col shadow-xl">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl max-h-[90vh]">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-xl">Resumo do Treino</DialogTitle>
 
-        {/* Header */}
-        <div className="flex items-start justify-between px-5 pt-5 pb-0 flex-shrink-0">
-          <h2 className="text-xl font-bold text-gray-900">Resumo do Treino</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors mt-0.5">
-            <X size={20} />
-          </button>
-        </div>
+          {/* Tabs */}
+          <div className="flex border-b border-gray-100 -mx-5 px-5 pt-2 -mb-4">
+            {(['resumo', 'carga'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`mr-6 pb-2.5 text-sm font-semibold capitalize transition-colors border-b-2 ${
+                  tab === t
+                    ? 'text-gray-900 border-gray-900'
+                    : 'text-gray-400 border-transparent hover:text-gray-600'
+                }`}
+              >
+                {t === 'resumo' ? 'Resumo' : 'Carga'}
+              </button>
+            ))}
+          </div>
+        </DialogHeader>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-100 mt-3 px-5 flex-shrink-0">
-          {(['resumo', 'carga'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`mr-6 pb-2.5 text-sm font-semibold capitalize transition-colors border-b-2 ${
-                tab === t
-                  ? 'text-gray-900 border-gray-900'
-                  : 'text-gray-400 border-transparent hover:text-gray-600'
-              }`}
-            >
-              {t === 'resumo' ? 'Resumo' : 'Carga'}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
         <div className="overflow-y-auto flex-1 px-5 py-5">
           {tab === 'resumo' ? (
             <WorkoutSummary exercises={exercises} />
@@ -326,7 +327,7 @@ export function LoadPreviewModal({
             <CargaContent exercises={exercises} />
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
